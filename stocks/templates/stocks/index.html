@@ -8,6 +8,12 @@
   <body>
     <h1>TradeQuest</h1>
     <p>Paper stocks (virtual trading) app is running.</p>
+
+    {% if user.is_authenticated %}
+      <p>Your stardust: {{ user.profile.stardust_balance }}</p>
+    {% else %}
+      <p><a href="{% url 'login' %}">Sign in</a> or <a href="{% url 'signup' %}">create an account</a>.</p>
+    {% endif %}
   </body>
 </html>
 
