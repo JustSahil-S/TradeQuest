@@ -235,7 +235,7 @@
       <p>Paper stocks (virtual trading) app is running.</p>
 
       <div class="chart-card">
-        <div class="chart-title" id="chartTitle">Loading symbol... - Closing Price</div>
+        <div class="chart-title" id="chartTitle">Loading symbol... - Weekly Closing Price</div>
         <div id="chartStatus" class="loading">Loading chart...</div>
         <div class="chart-canvas-wrap">
           <canvas id="aaplChart"></canvas>
@@ -289,14 +289,11 @@
             throw new Error(payload?.error || "Failed to fetch chart data");
           }
 
-          statusEl.textContent = payload?.mock ? "Chart loaded (mock data)" : "Chart loaded";
-          if (payload?.note) {
-            statusEl.textContent += " - " + payload.note;
-          }
+          statusEl.textContent = "Chart loaded";
 
           if (payload?.symbol) {
             const titleEl = document.getElementById("chartTitle");
-            if (titleEl) titleEl.textContent = payload.symbol + " - Closing Price";
+            if (titleEl) titleEl.textContent = payload.symbol + " - Weekly Closing Price";
           }
 
           const ctx = canvas.getContext("2d");

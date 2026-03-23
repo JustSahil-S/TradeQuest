@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.http import JsonResponse
 from django.contrib import messages
 from django.contrib.auth import login
@@ -7,7 +6,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from .finnhub import fetch_candles, mock_candles
+from .alphavantage import fetch_weekly_candles
 
 @login_required
 def home(request):
@@ -32,36 +31,10 @@ def signup(request):
 @login_required
 def aapl_chart(request):
     """
-    Return candle series for a symbol for Chart.js.
-
-    We try a small list of popular tickers and return the first one Finnhub
-    allows for the current API key/plan.
+    Return weekly AAPL series for Chart.js using Alpha Vantage.
     """
-    symbols_to_try = [
-        "AAPL",
-        "MSFT",
-        "NVDA",
-        "TSLA",
-        "AMZN",
-        "META",
-        "AMD",
-        "NFLX",
-        "GOOGL",
-        "SPY",
-    ]
-
-    last_exc = None
-    for symbol in symbols_to_try:
-        try:
-            return JsonResponse(fetch_candles(symbol=symbol, resolution="D", days=30))
-        except Exception as e:
-            last_exc = e
-
-    # If none of the tickers work, fall back (DEBUG) so the UI can be verified.
-    if settings.DEBUG:
-        fallback_symbol = "AAPL"
-        series = mock_candles(symbol=fallback_symbol, days=30)
-        series["note"] = f"Finnhub fallback (no symbol succeeded). Last error: {last_exc}"
-        return JsonResponse(series)
-
-    return JsonResponse({"error": str(last_exc) if last_exc else "Finnhub error"}, status=500)
+    symbol = "AAPL"
+    try:
+        return JsonResponse(fetch_weekly_candles(symbol=symbol, points=52))
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
