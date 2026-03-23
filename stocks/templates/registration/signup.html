@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create account</title>
+  </head>
+  <body>
+    <h1>Create account</h1>
+
+    {% if messages %}
+      {% for message in messages %}
+        <p style="color: #0b7285;">{{ message }}</p>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div>
+        {{ form.username.label_tag }}
+        {{ form.username }}
+      </div>
+      <div>
+        {{ form.password1.label_tag }}
+        {{ form.password1 }}
+      </div>
+      <div>
+        {{ form.password2.label_tag }}
+        {{ form.password2 }}
+      </div>
+
+      <button type="submit">Create account</button>
+    </form>
+
+    <p>
+      Already have an account?
+      <a href="{% url 'login' %}">Log in</a>
+    </p>
+  </body>
+</html>
+
