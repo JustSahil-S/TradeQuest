@@ -165,6 +165,25 @@
         margin: 0;
         color: var(--muted);
       }
+
+      .chart-card {
+        margin-top: 18px;
+        padding: 16px 16px 18px;
+        border-radius: 16px;
+        background: rgba(16, 16, 28, 0.45);
+        border: 1px solid rgba(181, 155, 255, 0.2);
+      }
+
+      .chart-title {
+        font-weight: 700;
+        color: var(--purple-2);
+        margin-bottom: 10px;
+      }
+
+      .loading {
+        color: var(--muted);
+        font-size: 14px;
+      }
     </style>
   </head>
   <body>
@@ -204,8 +223,15 @@
     <div class="content">
       <h1>TradeQuest</h1>
       <p>Paper stocks (virtual trading) app is running.</p>
+
+      <div class="chart-card">
+        <div class="chart-title">AAPL (Apples) - Closing Price</div>
+        <div id="chartStatus" class="loading">Loading chart...</div>
+        <canvas id="aaplChart" height="110"></canvas>
+      </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
       (function () {
         const btn = document.getElementById("profileMenuButton");
@@ -232,6 +258,81 @@
         document.addEventListener("keydown", function (e) {
           if (e.key === "Escape") closeMenu();
         });
+      })();
+    </script>
+
+    <script>
+      (async function () {
+        const statusEl = document.getElementById("chartStatus");
+        const canvas = document.getElementById("aaplChart");
+        if (!statusEl || !canvas) return;
+
+        try {
+          const res = await fetch("{% url 'aapl_chart' %}", {
+            headers: { Accept: "application/json" },
+          });
+          const payload = await res.json();
+
+          if (!res.ok) {
+            throw new Error(payload?.error || "Failed to fetch chart data");
+          }
+
+          statusEl.textContent = payload?.mock ? "Chart loaded (mock data)" : "Chart loaded";
+          if (payload?.note) {
+            statusEl.textContent += " - " + payload.note;
+          }
+
+          const ctx = canvas.getContext("2d");
+          const chart = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels: payload.labels,
+              datasets: [
+                {
+                  label: "AAPL Close",
+                  data: payload.closes,
+                  borderColor: "rgba(181, 155, 255, 1)",
+                  backgroundColor: "rgba(181, 155, 255, 0.12)",
+                  fill: true,
+                  tension: 0.3,
+                  pointRadius: 0,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  labels: {
+                    color: "#b59bff",
+                  },
+                },
+                tooltip: {
+                  callbacks: {
+                    label: function (context) {
+                      const v = context.parsed.y;
+                      return " Close: " + v;
+                    },
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
+                  grid: { color: "rgba(181, 155, 255, 0.12)" },
+                },
+                y: {
+                  ticks: { color: "#8e8ea8" },
+                  grid: { color: "rgba(181, 155, 255, 0.12)" },
+                },
+              },
+            },
+          });
+        } catch (e) {
+          console.error(e);
+          statusEl.textContent = "Could not load chart: " + (e?.message || "Unknown error");
+        }
       })();
     </script>
   </body>

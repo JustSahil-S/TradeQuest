@@ -121,6 +121,10 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Finnhub (external market data) API key.
+# Keep this in an environment variable (do not commit it).
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
+
 # Auth redirects
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
