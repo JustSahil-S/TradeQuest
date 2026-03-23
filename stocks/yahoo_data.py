@@ -11,17 +11,20 @@ def fetch_candles(symbol: str = "AAPL", timeframe: str = "w", points: int = 52) 
         "d": "1d",
         "w": "1wk",
         "m": "1mo",
+        "ytd": "1d",
     }
     label_map = {
         "d": "daily",
         "w": "weekly",
         "m": "monthly",
+        "ytd": "year-to-date",
     }
     if tf not in interval_map:
         raise RuntimeError("Invalid timeframe. Use one of: d, w, m.")
 
+    period = "ytd" if tf == "ytd" else "max"
     ticker = yf.Ticker(symbol)
-    hist = ticker.history(period="max", interval=interval_map[tf], auto_adjust=False)
+    hist = ticker.history(period=period, interval=interval_map[tf], auto_adjust=False)
 
     if hist is None or hist.empty:
         raise RuntimeError(f"No price data found for symbol '{symbol}'")
@@ -30,8 +33,10 @@ def fetch_candles(symbol: str = "AAPL", timeframe: str = "w", points: int = 52) 
     if closes_series.empty:
         raise RuntimeError(f"No close data found for symbol '{symbol}'")
 
-    safe_points = max(5, min(int(points), 500))
-    closes_series = closes_series.tail(safe_points)
+    # YTD is intrinsically bounded to this year's range.
+    if tf != "ytd":
+        safe_points = max(5, min(int(points), 500))
+        closes_series = closes_series.tail(safe_points)
     labels = [idx.strftime("%Y-%m-%d") for idx in closes_series.index]
     closes = [round(float(v), 2) for v in closes_series.tolist()]
 
@@ -74,4 +79,15 @@ def search_symbols(query: str, limit: int = 8) -> dict:
         )
 
     return {"results": results}
+
+
+def fetch_latest_price(symbol: str) -> float:
+    """
+    Return latest close price used for buy execution.
+    """
+    payload = fetch_candles(symbol=symbol, timeframe="d", points=5)
+    closes = payload.get("closes", [])
+    if not closes:
+        raise RuntimeError(f"No latest price found for symbol '{symbol}'")
+    return float(closes[-1])
 

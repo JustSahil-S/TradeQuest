@@ -151,7 +151,20 @@
 
       .content {
         padding: 26px 20px 60px;
-        max-width: 900px;
+        max-width: 1200px;
+      }
+
+      .dashboard-grid {
+        margin-top: 18px;
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+        gap: 16px;
+      }
+
+      @media (max-width: 980px) {
+        .dashboard-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
       h1 {
@@ -167,11 +180,65 @@
       }
 
       .chart-card {
-        margin-top: 18px;
         padding: 16px 16px 18px;
         border-radius: 16px;
         background: rgba(16, 16, 28, 0.45);
         border: 1px solid rgba(181, 155, 255, 0.2);
+      }
+
+      .portfolio-card {
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(16, 16, 28, 0.45);
+        border: 1px solid rgba(181, 155, 255, 0.2);
+      }
+
+      .portfolio-title {
+        margin: 0 0 10px;
+        color: var(--purple-2);
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .portfolio-total {
+        color: var(--text);
+        margin: 0 0 10px;
+        font-size: 13px;
+      }
+
+      .portfolio-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .portfolio-item {
+        border: 1px solid rgba(181, 155, 255, 0.16);
+        border-radius: 10px;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .portfolio-item .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+
+      .portfolio-item .symbol {
+        font-weight: 700;
+        color: #e8deff;
+      }
+
+      .portfolio-item .value {
+        color: #d7c8ff;
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      .portfolio-item .meta {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
       }
 
       .chart-canvas-wrap {
@@ -251,6 +318,50 @@
       .loading {
         color: var(--muted);
         font-size: 14px;
+      }
+
+      .buy-panel {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(181, 155, 255, 0.2);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .buy-panel label {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .qty-input {
+        width: 96px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(181, 155, 255, 0.3);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+      }
+
+      .buy-btn {
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(181, 155, 255, 0.45);
+        background: rgba(138, 92, 255, 0.22);
+        color: #efe9ff;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .buy-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .buy-meta {
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .chart-controls {
@@ -356,7 +467,7 @@
       </div>
 
       <div class="right">
-        <div class="stardust">Stardust: {{ user.profile.stardust_balance }}</div>
+        <div class="stardust" id="stardustBadge">Stardust: {{ user.profile.stardust_balance }}</div>
       </div>
     </div>
 
@@ -364,34 +475,50 @@
       <h1>TradeQuest</h1>
       <p>Paper stocks (virtual trading) app is running.</p>
 
-      <div class="chart-card">
-        <div class="search-wrap">
-          <input
-            id="symbolSearch"
-            class="symbol-search"
-            type="text"
-            autocomplete="off"
-            placeholder="Search ticker (e.g. AAPL, MSFT, TSLA)"
-          />
-          <div id="searchResults" class="search-results"></div>
-        </div>
-
-        <div class="chart-controls">
-          <div class="tf-group">
-            <button type="button" class="tf-btn" data-timeframe="d">Days</button>
-            <button type="button" class="tf-btn active" data-timeframe="w">Weeks</button>
-            <button type="button" class="tf-btn" data-timeframe="m">Months</button>
+      <div class="dashboard-grid">
+        <div class="chart-card">
+          <div class="search-wrap">
+            <input
+              id="symbolSearch"
+              class="symbol-search"
+              type="text"
+              autocomplete="off"
+              placeholder="Search ticker (e.g. AAPL, MSFT, TSLA)"
+            />
+            <div id="searchResults" class="search-results"></div>
           </div>
-          <div class="zoom-wrap">
-            <label for="zoomSlider">Zoom</label>
-            <input id="zoomSlider" type="range" min="20" max="120" step="1" value="52" />
+
+          <div class="chart-controls">
+            <div class="tf-group">
+              <button type="button" class="tf-btn" data-timeframe="d">Days</button>
+              <button type="button" class="tf-btn active" data-timeframe="w">Weeks</button>
+              <button type="button" class="tf-btn" data-timeframe="m">Months</button>
+              <button type="button" class="tf-btn" data-timeframe="ytd">YTD</button>
+            </div>
+            <div class="zoom-wrap">
+              <label for="zoomSlider">Zoom</label>
+              <input id="zoomSlider" type="range" min="20" max="120" step="1" value="52" />
+            </div>
+          </div>
+
+          <div class="chart-title" id="chartTitle">Loading symbol... - Weekly Closing Price</div>
+          <div id="chartStatus" class="loading"></div>
+          <div class="chart-canvas-wrap">
+            <canvas id="aaplChart"></canvas>
+          </div>
+          <div class="buy-panel">
+            <label for="buyQty">Buy shares</label>
+            <input id="buyQty" class="qty-input" type="number" min="1" step="1" value="1" />
+            <button id="buyBtn" type="button" class="buy-btn">Buy selected stock</button>
+            <div id="buyMeta" class="buy-meta"></div>
           </div>
         </div>
-
-        <div class="chart-title" id="chartTitle">Loading symbol... - Weekly Closing Price</div>
-        <div id="chartStatus" class="loading"></div>
-        <div class="chart-canvas-wrap">
-          <canvas id="aaplChart"></canvas>
+        <div class="portfolio-card">
+          <h2 class="portfolio-title">Your Portfolio</h2>
+          <p class="portfolio-total" id="portfolioTotal">Total value: 0 stardust</p>
+          <div class="portfolio-list" id="portfolioList">
+            <div class="buy-meta">No positions yet.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -435,17 +562,57 @@
         const titleEl = document.getElementById("chartTitle");
         const slider = document.getElementById("zoomSlider");
         const tfButtons = Array.from(document.querySelectorAll(".tf-btn"));
-        if (!statusEl || !canvas || !input || !resultsEl || !slider || !tfButtons.length) return;
+        const buyQtyEl = document.getElementById("buyQty");
+        const buyBtnEl = document.getElementById("buyBtn");
+        const buyMetaEl = document.getElementById("buyMeta");
+        const stardustBadgeEl = document.getElementById("stardustBadge");
+        const portfolioListEl = document.getElementById("portfolioList");
+        const portfolioTotalEl = document.getElementById("portfolioTotal");
+        if (
+          !statusEl ||
+          !canvas ||
+          !input ||
+          !resultsEl ||
+          !slider ||
+          !tfButtons.length ||
+          !buyQtyEl ||
+          !buyBtnEl ||
+          !buyMetaEl ||
+          !portfolioListEl ||
+          !portfolioTotalEl
+        )
+          return;
 
         let chart = null;
         let debounceTimer = null;
         let currentSymbol = "AAPL";
         let currentTimeframe = "w";
+        let currentPrice = null;
 
         const timeframeConfig = {
           d: { min: 20, max: 200, defaultPoints: 90, label: "Daily" },
           w: { min: 20, max: 260, defaultPoints: 52, label: "Weekly" },
           m: { min: 12, max: 180, defaultPoints: 48, label: "Monthly" },
+          ytd: { min: 20, max: 366, defaultPoints: 220, label: "Year-to-date" },
+        };
+
+        const crosshairPlugin = {
+          id: "crosshairPlugin",
+          afterDatasetsDraw(chartInstance) {
+            const active = chartInstance.tooltip?.getActiveElements?.() || [];
+            if (!active.length) return;
+
+            const { ctx, chartArea } = chartInstance;
+            const x = active[0].element.x;
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x, chartArea.top);
+            ctx.lineTo(x, chartArea.bottom);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "rgba(181, 155, 255, 0.55)";
+            ctx.stroke();
+            ctx.restore();
+          },
         };
 
         function applyTimeframeConfig(tf, resetValue) {
@@ -467,6 +634,50 @@
         function hideResults() {
           resultsEl.classList.remove("open");
           resultsEl.innerHTML = "";
+        }
+
+        function getCookie(name) {
+          const v = `; ${document.cookie}`;
+          const parts = v.split(`; ${name}=`);
+          if (parts.length === 2) return parts.pop().split(";").shift();
+          return "";
+        }
+
+        function renderPortfolio(payload) {
+          const positions = payload?.positions || [];
+          portfolioTotalEl.textContent =
+            "Total value: " + Number(payload?.portfolio_value_stardust || 0).toLocaleString() + " stardust";
+
+          if (!positions.length) {
+            portfolioListEl.innerHTML = '<div class="buy-meta">No positions yet.</div>';
+            return;
+          }
+
+          portfolioListEl.innerHTML = "";
+          for (const p of positions) {
+            const item = document.createElement("div");
+            item.className = "portfolio-item";
+            item.innerHTML =
+              '<div class="top">' +
+              `<span class="symbol">${p.symbol}</span>` +
+              `<span class="value">${Number(p.current_value_stardust || 0).toLocaleString()} stardust</span>` +
+              "</div>" +
+              '<div class="meta">' +
+              `Qty: ${p.quantity} | Current: ${p.current_price_stardust} | Avg: ${p.average_cost_stardust}` +
+              "</div>";
+            portfolioListEl.appendChild(item);
+          }
+        }
+
+        async function loadPortfolio() {
+          try {
+            const res = await fetch("{% url 'portfolio' %}", { headers: { Accept: "application/json" } });
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.error || "Failed to load portfolio");
+            renderPortfolio(payload);
+          } catch (e) {
+            portfolioListEl.innerHTML = '<div class="buy-meta">Could not load portfolio.</div>';
+          }
         }
 
         function showResults(items) {
@@ -578,6 +789,11 @@
                 : "Price";
               titleEl.textContent = payload.symbol + " - " + tfLabel + " Closing Price";
             }
+            currentSymbol = payload?.symbol || currentSymbol;
+            currentPrice = Number((payload?.closes || []).slice(-1)[0] || 0);
+            if (currentPrice > 0) {
+              buyMetaEl.textContent = `Selected: ${currentSymbol} | Last close: ${currentPrice.toFixed(2)} stardust`;
+            }
 
             const values = (payload.closes || []).map(Number).filter((n) => Number.isFinite(n));
             const minV = Math.min(...values);
@@ -587,65 +803,133 @@
             const yMin = Math.max(0, minV - pad);
             const yMax = maxV + pad;
 
-            if (chart) chart.destroy();
-            const ctx = canvas.getContext("2d");
-            chart = new Chart(ctx, {
-              type: "line",
-              data: {
-                labels: payload.labels,
-                datasets: [
-                  {
-                    label: "",
-                    data: payload.closes,
-                    borderColor: "rgba(181, 155, 255, 1)",
-                    backgroundColor: "rgba(181, 155, 255, 0.12)",
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0,
+            if (!chart) {
+              const ctx = canvas.getContext("2d");
+              chart = new Chart(ctx, {
+                type: "line",
+                plugins: [crosshairPlugin],
+                data: {
+                  labels: payload.labels,
+                  datasets: [
+                    {
+                      label: "",
+                      data: payload.closes,
+                      borderColor: "rgba(181, 155, 255, 1)",
+                      backgroundColor: "rgba(181, 155, 255, 0.12)",
+                      fill: true,
+                      tension: 0.3,
+                      pointRadius: 0,
+                      pointHoverRadius: 4,
+                      pointHoverBackgroundColor: "rgba(239, 233, 255, 1)",
+                      pointHoverBorderColor: "rgba(127, 89, 232, 1)",
+                      pointHoverBorderWidth: 2,
+                    },
+                  ],
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  animation: {
+                    duration: 300,
+                    easing: "easeOutQuart",
                   },
-                ],
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                plugins: {
-                  legend: {
-                    display: false,
-                    labels: { color: "#b59bff" },
-                  },
-                  tooltip: {
-                    callbacks: {
-                      label: function (context) {
-                        const v = context.parsed.y;
-                        return " Close: " + v;
+                  transitions: {
+                    active: {
+                      animation: {
+                        duration: 200,
                       },
                     },
                   },
-                },
-                scales: {
-                  x: {
-                    ticks: { color: "#8e8ea8", maxTicksLimit: 8 },
-                    grid: { color: "rgba(181, 155, 255, 0.12)" },
+                  plugins: {
+                    legend: {
+                      display: false,
+                      labels: { color: "#b59bff" },
+                    },
+                    tooltip: {
+                      intersect: false,
+                      mode: "index",
+                      callbacks: {
+                        label: function (context) {
+                          const v = context.parsed.y;
+                          return " Close: " + Number(v).toFixed(2);
+                        },
+                      },
+                    },
                   },
-                  y: {
-                    min: yMin,
-                    max: yMax,
-                    ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
-                    grid: { color: "rgba(181, 155, 255, 0.12)" },
+                  scales: {
+                    x: {
+                      ticks: { color: "#8e8ea8", maxTicksLimit: 8 },
+                      grid: { color: "rgba(181, 155, 255, 0.12)" },
+                    },
+                    y: {
+                      min: yMin,
+                      max: yMax,
+                      ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
+                      grid: { color: "rgba(181, 155, 255, 0.12)" },
+                    },
                   },
                 },
-              },
-            });
+                interaction: {
+                  intersect: false,
+                  mode: "index",
+                },
+              });
+            } else {
+              chart.data.labels = payload.labels;
+              chart.data.datasets[0].data = payload.closes;
+              chart.options.scales.y.min = yMin;
+              chart.options.scales.y.max = yMax;
+              chart.update();
+            }
           } catch (e) {
             console.error(e);
             statusEl.textContent = "Could not load chart: " + (e?.message || "Unknown error");
           }
         }
 
+        buyBtnEl.addEventListener("click", async function () {
+          const qty = Number(buyQtyEl.value);
+          if (!Number.isInteger(qty) || qty <= 0) {
+            buyMetaEl.textContent = "Quantity must be a positive whole number.";
+            return;
+          }
+
+          buyBtnEl.disabled = true;
+          buyMetaEl.textContent = "";
+          try {
+            const res = await fetch("{% url 'buy_stock' %}", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+                Accept: "application/json",
+              },
+              body: JSON.stringify({
+                symbol: currentSymbol,
+                quantity: qty,
+              }),
+            });
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.error || "Buy failed");
+
+            buyMetaEl.textContent =
+              `Bought ${payload.quantity_bought} ${payload.symbol} @ ${payload.price_per_share} ` +
+              `(${payload.total_cost} stardust).`;
+            if (stardustBadgeEl) {
+              stardustBadgeEl.textContent = `Stardust: ${payload.remaining_stardust}`;
+            }
+            loadPortfolio();
+          } catch (e) {
+            buyMetaEl.textContent = "Buy failed: " + (e?.message || "Unknown error");
+          } finally {
+            buyBtnEl.disabled = false;
+          }
+        });
+
         applyTimeframeConfig(currentTimeframe, true);
         setActiveTimeframeButton(currentTimeframe);
         loadChart(currentSymbol, currentTimeframe, Number(slider.value));
+        loadPortfolio();
       })();
     </script>
   </body>
