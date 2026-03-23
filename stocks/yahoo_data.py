@@ -1,7 +1,7 @@
 import yfinance as yf
 
 
-def fetch_candles(symbol: str = "AAPL", timeframe: str = "w", points: int = 52) -> dict:
+def fetch_candles(symbol: str = "SPY", timeframe: str = "w", points: int = 52) -> dict:
     """
     Fetch close prices from Yahoo Finance via yfinance.
     No API key required.

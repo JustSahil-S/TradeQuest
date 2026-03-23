@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 
@@ -12,7 +14,11 @@ class Profile(models.Model):
         on_delete=models.CASCADE,
         related_name="profile",
     )
-    stardust_balance = models.PositiveIntegerField(default=100)
+    stardust_balance = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("100.00000000"),
+    )
 
     def __str__(self):
         return f"Profile(user={self.user.username})"
@@ -30,7 +36,17 @@ class Position(models.Model):
     )
     symbol = models.CharField(max_length=12)
     quantity = models.PositiveIntegerField(default=0)
-    average_cost_stardust = models.PositiveIntegerField(default=0)
+    average_cost_stardust = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0"),
+    )
+    # Market value (qty × price) at last buy/sell; P/L = current value − this (resets each trade).
+    last_reset_value_stardust = models.DecimalField(
+        max_digits=24,
+        decimal_places=8,
+        default=Decimal("0"),
+    )
 
     class Meta:
         constraints = [

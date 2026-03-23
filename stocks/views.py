@@ -1,4 +1,8 @@
 import json
+import os
+import urllib.error
+import urllib.request
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.http import JsonResponse
@@ -12,6 +16,74 @@ from django.views.decorators.http import require_POST
 
 from .models import Position, Profile
 from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols
+
+# Smallest stardust unit (8 decimal places) for exact arithmetic.
+DUST_Q = Decimal("0.00000001")
+DUST_DISPLAY_Q = Decimal("0.01")
+
+
+def _dust_from_float(price: float) -> Decimal:
+    """Convert a market USD float to stardust per share (exact Decimal, 8 dp)."""
+    d = Decimal(str(float(price)))
+    if d < DUST_Q:
+        d = DUST_Q
+    return d.quantize(DUST_Q, rounding=ROUND_HALF_UP)
+
+
+def _dust_str(d: Decimal) -> str:
+    """Serialize stardust for JSON (fixed 8 dp, no scientific notation)."""
+    return format(d.quantize(DUST_Q, rounding=ROUND_HALF_UP), "f")
+
+
+def _dust_display_str(d: Decimal) -> str:
+    """Human-readable stardust for error messages (hundredths)."""
+    q = d.quantize(DUST_DISPLAY_Q, rounding=ROUND_HALF_UP)
+    return f"{q:.2f}"
+
+
+def _ollama_chat(ollama_host: str, model: str, messages: list[dict]) -> str:
+    """
+    Call Ollama's non-streaming chat endpoint and return assistant text.
+    Expected Ollama endpoint: POST {host}/api/chat
+    """
+    host = (ollama_host or "").rstrip("/")
+    if not host:
+        raise RuntimeError("OLLAMA_HOST is not configured")
+
+    url = host + "/api/chat"
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Ollama connection error: {e}") from e
+
+    try:
+        payload = json.loads(raw)
+    except Exception as e:
+        raise RuntimeError("Ollama returned invalid JSON") from e
+
+    # Ollama responds with: {"message": {"role":"assistant","content":"..."}, ...}
+    msg = payload.get("message") or {}
+    content = msg.get("content")
+    if not content:
+        raise RuntimeError("Ollama returned an empty response")
+    return str(content)
+
 
 @login_required
 def home(request):
@@ -34,11 +106,11 @@ def signup(request):
 
 
 @login_required
-def aapl_chart(request):
+def stock_chart(request):
     """
-    Return selected-symbol series for Chart.js using Yahoo Finance.
+    Return price series for Chart.js (Yahoo Finance). Default symbol: SPY (S&P 500 ETF).
     """
-    symbol = (request.GET.get("symbol") or "AAPL").upper().strip()
+    symbol = (request.GET.get("symbol") or "SPY").upper().strip()
     timeframe = (request.GET.get("timeframe") or "w").lower().strip()
     points_raw = request.GET.get("points") or "52"
     try:
@@ -65,28 +137,39 @@ def symbol_search(request):
 def portfolio(request):
     positions = Position.objects.filter(user=request.user).order_by("symbol")
     items = []
-    total_value = 0
+    total_value = Decimal("0")
 
     for p in positions:
         try:
             latest = fetch_latest_price(p.symbol)
-            current_price = max(1, int(round(latest)))
+            current_price = _dust_from_float(latest)
         except Exception:
-            current_price = 0
+            current_price = Decimal("0")
 
-        current_value = current_price * p.quantity
+        current_value = (current_price * Decimal(p.quantity)).quantize(
+            DUST_Q, rounding=ROUND_HALF_UP
+        )
         total_value += current_value
+        reset_val = p.last_reset_value_stardust
+        if reset_val == 0 and p.quantity > 0:
+            reset_val = (Decimal(p.quantity) * p.average_cost_stardust).quantize(
+                DUST_Q, rounding=ROUND_HALF_UP
+            )
+        pnl = (current_value - reset_val).quantize(DUST_Q, rounding=ROUND_HALF_UP)
         items.append(
             {
                 "symbol": p.symbol,
                 "quantity": p.quantity,
-                "average_cost_stardust": p.average_cost_stardust,
-                "current_price_stardust": current_price,
-                "current_value_stardust": current_value,
+                "average_cost_stardust": _dust_str(p.average_cost_stardust),
+                "current_price_stardust": _dust_str(current_price),
+                "current_value_stardust": _dust_str(current_value),
+                "pnl_stardust": _dust_str(pnl),
             }
         )
 
-    return JsonResponse({"positions": items, "portfolio_value_stardust": total_value})
+    return JsonResponse(
+        {"positions": items, "portfolio_value_stardust": _dust_str(total_value)}
+    )
 
 
 @login_required
@@ -115,16 +198,17 @@ def buy_stock(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    price_per_share = max(1, int(round(market_price)))
-    total_cost = price_per_share * quantity
+    price_per_share = _dust_from_float(market_price)
+    qty_dec = Decimal(quantity)
+    total_cost = (price_per_share * qty_dec).quantize(DUST_Q, rounding=ROUND_HALF_UP)
 
     profile = Profile.objects.select_for_update().get(user=request.user)
     if profile.stardust_balance < total_cost:
         return JsonResponse(
             {
                 "error": (
-                    f"Not enough stardust. Need {total_cost}, "
-                    f"but you only have {profile.stardust_balance}."
+                    f"Not enough stardust. Need {_dust_display_str(total_cost)} stardust, "
+                    f"but you only have {_dust_display_str(profile.stardust_balance)}."
                 )
             },
             status=400,
@@ -133,7 +217,11 @@ def buy_stock(request):
     position, created = Position.objects.select_for_update().get_or_create(
         user=request.user,
         symbol=symbol,
-        defaults={"quantity": 0, "average_cost_stardust": price_per_share},
+        defaults={
+            "quantity": 0,
+            "average_cost_stardust": price_per_share,
+            "last_reset_value_stardust": Decimal("0"),
+        },
     )
 
     existing_qty = position.quantity
@@ -141,15 +229,27 @@ def buy_stock(request):
     if existing_qty == 0:
         new_avg = price_per_share
     else:
-        prev_total = position.average_cost_stardust * existing_qty
-        new_total = prev_total + (price_per_share * quantity)
-        new_avg = int(round(new_total / new_qty))
+        prev_total = position.average_cost_stardust * Decimal(existing_qty)
+        new_total = prev_total + (price_per_share * qty_dec)
+        new_avg = (new_total / Decimal(new_qty)).quantize(DUST_Q, rounding=ROUND_HALF_UP)
 
+    reset_snapshot = (Decimal(new_qty) * price_per_share).quantize(
+        DUST_Q, rounding=ROUND_HALF_UP
+    )
     position.quantity = new_qty
     position.average_cost_stardust = new_avg
-    position.save(update_fields=["quantity", "average_cost_stardust"])
+    position.last_reset_value_stardust = reset_snapshot
+    position.save(
+        update_fields=[
+            "quantity",
+            "average_cost_stardust",
+            "last_reset_value_stardust",
+        ]
+    )
 
-    profile.stardust_balance -= total_cost
+    profile.stardust_balance = (profile.stardust_balance - total_cost).quantize(
+        DUST_Q, rounding=ROUND_HALF_UP
+    )
     profile.save(update_fields=["stardust_balance"])
 
     return JsonResponse(
@@ -157,10 +257,193 @@ def buy_stock(request):
             "ok": True,
             "symbol": symbol,
             "quantity_bought": quantity,
-            "price_per_share": price_per_share,
-            "total_cost": total_cost,
+            "price_per_share": _dust_str(price_per_share),
+            "total_cost": _dust_str(total_cost),
             "owned_quantity": new_qty,
-            "average_cost_stardust": new_avg,
-            "remaining_stardust": profile.stardust_balance,
+            "average_cost_stardust": _dust_str(new_avg),
+            "remaining_stardust": _dust_str(profile.stardust_balance),
         }
     )
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def sell_stock(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    symbol = (payload.get("symbol") or "").upper().strip()
+    quantity_raw = payload.get("quantity")
+    if not symbol:
+        return JsonResponse({"error": "Symbol is required"}, status=400)
+
+    try:
+        quantity = int(quantity_raw)
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Quantity must be an integer"}, status=400)
+    if quantity <= 0:
+        return JsonResponse({"error": "Quantity must be greater than 0"}, status=400)
+
+    try:
+        market_price = fetch_latest_price(symbol)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    price_per_share = _dust_from_float(market_price)
+    qty_dec = Decimal(quantity)
+
+    try:
+        position = Position.objects.select_for_update().get(user=request.user, symbol=symbol)
+    except Position.DoesNotExist:
+        return JsonResponse({"error": f"You do not own {symbol}."}, status=400)
+
+    if quantity > position.quantity:
+        return JsonResponse(
+            {
+                "error": (
+                    f"You only own {position.quantity} shares of {symbol}. "
+                    f"Cannot sell {quantity}."
+                )
+            },
+            status=400,
+        )
+
+    proceeds = (price_per_share * qty_dec).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+    remaining_qty = position.quantity - quantity
+    if remaining_qty == 0:
+        position.delete()
+    else:
+        position.quantity = remaining_qty
+        position.last_reset_value_stardust = (
+            Decimal(remaining_qty) * price_per_share
+        ).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        position.save(update_fields=["quantity", "last_reset_value_stardust"])
+
+    profile = Profile.objects.select_for_update().get(user=request.user)
+    profile.stardust_balance = (profile.stardust_balance + proceeds).quantize(
+        DUST_Q, rounding=ROUND_HALF_UP
+    )
+    profile.save(update_fields=["stardust_balance"])
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "symbol": symbol,
+            "quantity_sold": quantity,
+            "price_per_share": _dust_str(price_per_share),
+            "total_proceeds": _dust_str(proceeds),
+            "owned_quantity": remaining_qty,
+            "remaining_stardust": _dust_str(profile.stardust_balance),
+        }
+    )
+
+
+@login_required
+@require_POST
+def advisor_chat(request):
+    """
+    Chat endpoint for TradeQuest advisor panel.
+    Uses local Ollama to generate buy/sell suggestions based on the user's portfolio.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    user_message = (payload.get("message") or "").strip()
+    history = payload.get("history") or []
+    if not user_message:
+        return JsonResponse({"error": "Message is required"}, status=400)
+
+    # Keep prompt smaller; this is not meant for long conversations.
+    cleaned_history: list[dict] = []
+    for h in history[-8:]:
+        role = h.get("role")
+        content = str(h.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            cleaned_history.append({"role": role, "content": content[:2000]})
+
+    profile = Profile.objects.get(user=request.user)
+    positions = Position.objects.filter(user=request.user).order_by("symbol")[:20]
+
+    holdings = []
+    for p in positions:
+        try:
+            latest = fetch_latest_price(p.symbol)
+            current_price = _dust_from_float(latest)
+            current_value = (current_price * Decimal(p.quantity)).quantize(
+                DUST_Q, rounding=ROUND_HALF_UP
+            )
+            reset_val = p.last_reset_value_stardust
+            if reset_val == 0 and p.quantity > 0:
+                reset_val = (Decimal(p.quantity) * p.average_cost_stardust).quantize(
+                    DUST_Q, rounding=ROUND_HALF_UP
+                )
+            pnl = (current_value - reset_val).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        except Exception:
+            current_price = Decimal("0")
+            current_value = Decimal("0")
+            pnl = Decimal("0")
+
+        holdings.append(
+            {
+                "symbol": p.symbol,
+                "quantity": int(p.quantity),
+                "avg_cost": _dust_display_str(p.average_cost_stardust),
+                "current_price": _dust_display_str(current_price),
+                "current_value": _dust_display_str(current_value),
+                "net_pnl": _dust_display_str(pnl),
+            }
+        )
+
+    stardust_balance = _dust_display_str(profile.stardust_balance)
+
+    # The model should produce concrete, market-realistic suggestions for this simulator.
+    system_prompt = (
+        "You are the TradeQuest trading advisor. "
+        "You help a user decide what to buy or sell in a paper trading app called TradeQuest. "
+        "The main currency is stardust. Use the provided stardust balance and current holdings "
+        "to suggest actions that the user can actually do.\n\n"
+        "Rules:\n"
+        "- Always respect constraints: buy total cost must be <= stardust balance; "
+        "sell quantity must be <= the user's current quantity for that symbol.\n"
+        "- Use latest prices from the prompt to estimate cost/proceeds.\n"
+        "- If exact calculations are required, tell the user the numbers are estimates based on latest price.\n"
+        "- Suggest only real, widely traded US stocks/ETFs with valid tickers (examples: SPY, QQQ, AAPL, MSFT, NVDA, AMZN, TSLA, META).\n"
+        "- Never invent fake companies, fake tickers, or themed roleplay assets.\n"
+        "- Keep suggestions practical and concrete: ticker, buy/sell action, share count, estimated stardust impact, and 1 short reason.\n"
+        "- When giving trades, suggest at most 3 candidates.\n"
+        "- Do NOT execute trades; only recommend.\n"
+        "- Do not include legal disclaimers or 'not financial advice' warnings.\n"
+    )
+
+    context_text = (
+        f"User stardust balance: {stardust_balance}\n"
+        f"Current holdings (latest price): {json.dumps(holdings)}\n"
+        "If the user asks a direct question (e.g., 'Should I buy SPY?'), answer directly and propose "
+        "specific share quantities and estimated stardust cost/proceeds."
+    )
+
+    ollama_messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    # Include conversation history.
+    ollama_messages.extend(cleaned_history)
+    # Add the portfolio context just before the actual user message.
+    ollama_messages.append(
+        {
+            "role": "user",
+            "content": f"{context_text}\n\nUser message: {user_message}",
+        }
+    )
+
+    model = os.environ.get("OLLAMA_MODEL", "llama3")
+    ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+    try:
+        reply = _ollama_chat(ollama_host=ollama_host, model=model, messages=ollama_messages)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"reply": reply})

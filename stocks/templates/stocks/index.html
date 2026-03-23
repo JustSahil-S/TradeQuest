@@ -212,10 +212,85 @@
       }
 
       .portfolio-item {
+        perspective: 1000px;
+        cursor: pointer;
+      }
+
+      .portfolio-item-inner {
+        position: relative;
+        width: 100%;
+        height: 108px;
+        transition: transform 220ms ease;
+        transform-style: preserve-3d;
+      }
+
+      .portfolio-item.flipped .portfolio-item-inner {
+        transform: rotateY(180deg);
+      }
+
+      .portfolio-face {
         border: 1px solid rgba(181, 155, 255, 0.16);
         border-radius: 10px;
         padding: 10px;
         background: rgba(0, 0, 0, 0.2);
+        backface-visibility: hidden;
+        box-sizing: border-box;
+      }
+
+      .portfolio-face.front {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .portfolio-face.back {
+        position: absolute;
+        inset: 0;
+        transform: rotateY(180deg);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .portfolio-item .sell-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 8px;
+      }
+
+      .portfolio-item .sell-qty {
+        width: 80px;
+        padding: 6px 8px;
+        border-radius: 7px;
+        border: 1px solid rgba(181, 155, 255, 0.3);
+        background: rgba(0, 0, 0, 0.25);
+        color: var(--text);
+        cursor: text;
+      }
+
+      .portfolio-item .sell-btn,
+      .portfolio-item .cancel-sell-btn {
+        border: 1px solid rgba(181, 155, 255, 0.4);
+        background: rgba(138, 92, 255, 0.22);
+        color: #efe9ff;
+        border-radius: 7px;
+        padding: 6px 9px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .portfolio-item .cancel-sell-btn {
+        background: rgba(0, 0, 0, 0.3);
+      }
+
+      .portfolio-item .sell-error {
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        line-height: 1.35;
+        color: #ff8a9d;
+        min-height: 1.2em;
       }
 
       .portfolio-item .top {
@@ -233,6 +308,18 @@
         color: #d7c8ff;
         font-weight: 600;
         font-size: 13px;
+      }
+
+      .portfolio-item .value.pnl-pos {
+        color: #7dffb3;
+      }
+
+      .portfolio-item .value.pnl-neg {
+        color: #ff8a9d;
+      }
+
+      .portfolio-item .value.pnl-zero {
+        color: #a89bc4;
       }
 
       .portfolio-item .meta {
@@ -364,6 +451,107 @@
         font-size: 12px;
       }
 
+      .buy-meta.error {
+        color: #ff8a9d;
+      }
+
+      .advisor-window {
+        margin-top: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(181, 155, 255, 0.22);
+        background: rgba(0, 0, 0, 0.18);
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .advisor-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .advisor-title {
+        font-weight: 800;
+        color: var(--purple-2);
+        font-size: 14px;
+      }
+
+      .advisor-clear-btn {
+        border: 1px solid rgba(181, 155, 255, 0.25);
+        background: rgba(0, 0, 0, 0.25);
+        color: #efe9ff;
+        border-radius: 10px;
+        padding: 6px 9px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .advisor-messages {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid rgba(181, 155, 255, 0.16);
+        border-radius: 12px;
+        padding: 10px;
+        height: 220px;
+        overflow: auto;
+      }
+
+      .advisor-bubble {
+        white-space: pre-wrap;
+        font-size: 13px;
+        line-height: 1.35;
+        padding: 8px 10px;
+        border-radius: 12px;
+        margin-bottom: 8px;
+        max-width: 90%;
+      }
+
+      .advisor-bubble.user {
+        background: rgba(138, 92, 255, 0.18);
+        border: 1px solid rgba(181, 155, 255, 0.22);
+        color: #efe9ff;
+        margin-left: auto;
+        text-align: left;
+      }
+
+      .advisor-bubble.assistant {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid rgba(181, 155, 255, 0.14);
+        color: #ddd2ff;
+      }
+
+      .advisor-input-row {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+      }
+
+      .advisor-textarea {
+        flex: 1;
+        min-height: 36px;
+        max-height: 90px;
+        resize: none;
+        border-radius: 10px;
+        border: 1px solid rgba(181, 155, 255, 0.3);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+
+      .advisor-send-btn {
+        border: 1px solid rgba(181, 155, 255, 0.45);
+        background: rgba(138, 92, 255, 0.22);
+        color: #efe9ff;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
       .chart-controls {
         display: flex;
         gap: 12px;
@@ -467,7 +655,9 @@
       </div>
 
       <div class="right">
-        <div class="stardust" id="stardustBadge">Stardust: {{ user.profile.stardust_balance }}</div>
+        <div class="stardust" id="stardustBadge">
+          Stardust: {{ user.profile.stardust_balance|floatformat:0 }}
+        </div>
       </div>
     </div>
 
@@ -483,7 +673,7 @@
               class="symbol-search"
               type="text"
               autocomplete="off"
-              placeholder="Search ticker (e.g. AAPL, MSFT, TSLA)"
+              placeholder="Search ticker (e.g. SPY, MSFT, AAPL)"
             />
             <div id="searchResults" class="search-results"></div>
           </div>
@@ -504,13 +694,34 @@
           <div class="chart-title" id="chartTitle">Loading symbol... - Weekly Closing Price</div>
           <div id="chartStatus" class="loading"></div>
           <div class="chart-canvas-wrap">
-            <canvas id="aaplChart"></canvas>
+            <canvas id="stockChart"></canvas>
           </div>
           <div class="buy-panel">
             <label for="buyQty">Buy shares</label>
             <input id="buyQty" class="qty-input" type="number" min="1" step="1" value="1" />
             <button id="buyBtn" type="button" class="buy-btn">Buy selected stock</button>
             <div id="buyMeta" class="buy-meta"></div>
+          </div>
+
+          <div class="advisor-window" id="advisorWindow">
+            <div class="advisor-header">
+              <div class="advisor-title">TradeQuest Advisor (Ollama)</div>
+              <button type="button" class="advisor-clear-btn" id="advisorClearBtn">
+                Clear
+              </button>
+            </div>
+            <div class="advisor-messages" id="advisorMessages"></div>
+            <div class="advisor-input-row">
+              <textarea
+                id="advisorInput"
+                class="advisor-textarea"
+                placeholder="Ask: what should I buy/sell? Use my stardust + holdings."
+                rows="2"
+              ></textarea>
+              <button type="button" class="advisor-send-btn" id="advisorSendBtn">
+                Send
+              </button>
+            </div>
           </div>
         </div>
         <div class="portfolio-card">
@@ -556,7 +767,7 @@
     <script>
       (function () {
         const statusEl = document.getElementById("chartStatus");
-        const canvas = document.getElementById("aaplChart");
+        const canvas = document.getElementById("stockChart");
         const input = document.getElementById("symbolSearch");
         const resultsEl = document.getElementById("searchResults");
         const titleEl = document.getElementById("chartTitle");
@@ -585,7 +796,7 @@
 
         let chart = null;
         let debounceTimer = null;
-        let currentSymbol = "AAPL";
+        let currentSymbol = "SPY";
         let currentTimeframe = "w";
         let currentPrice = null;
 
@@ -643,10 +854,28 @@
           return "";
         }
 
+        /** Stardust shown in UI (hundredths). */
+        function formatStardust2(raw) {
+          const n = parseFloat(String(raw ?? "0"));
+          if (!Number.isFinite(n)) return "0.00";
+          return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        /** Navbar badge: nearest whole stardust. */
+        function formatStardustBadge(raw) {
+          const n = Math.round(parseFloat(String(raw ?? "0")));
+          return Number.isFinite(n) ? String(n) : "0";
+        }
+
+        function setBuyMeta(text, asError) {
+          buyMetaEl.textContent = text || "";
+          buyMetaEl.classList.toggle("error", Boolean(asError));
+        }
+
         function renderPortfolio(payload) {
           const positions = payload?.positions || [];
           portfolioTotalEl.textContent =
-            "Total value: " + Number(payload?.portfolio_value_stardust || 0).toLocaleString() + " stardust";
+            "Total value: " + formatStardust2(payload?.portfolio_value_stardust) + " stardust";
 
           if (!positions.length) {
             portfolioListEl.innerHTML = '<div class="buy-meta">No positions yet.</div>';
@@ -657,16 +886,115 @@
           for (const p of positions) {
             const item = document.createElement("div");
             item.className = "portfolio-item";
+            const pnlNum = parseFloat(String(p.pnl_stardust ?? "0"));
+            const pnlFinite = Number.isFinite(pnlNum) ? pnlNum : 0;
+            const pnlClass =
+              pnlFinite > 0 ? "value pnl-pos" : pnlFinite < 0 ? "value pnl-neg" : "value pnl-zero";
+            const pnlPrefix = pnlFinite > 0 ? "+" : "";
+            const pnlText = pnlPrefix + formatStardust2(pnlFinite) + " net P/L";
             item.innerHTML =
+              '<div class="portfolio-item-inner">' +
+              '<div class="portfolio-face front">' +
               '<div class="top">' +
               `<span class="symbol">${p.symbol}</span>` +
-              `<span class="value">${Number(p.current_value_stardust || 0).toLocaleString()} stardust</span>` +
+              `<span class="${pnlClass}">${pnlText}</span>` +
               "</div>" +
               '<div class="meta">' +
-              `Qty: ${p.quantity} | Current: ${p.current_price_stardust} | Avg: ${p.average_cost_stardust}` +
+              `Qty: ${p.quantity} | Value: ${formatStardust2(p.current_value_stardust)} | Cur: ${formatStardust2(
+                p.current_price_stardust
+              )} | Avg: ${formatStardust2(p.average_cost_stardust)}` +
+              "</div>" +
+              "</div>" +
+              '<div class="portfolio-face back">' +
+              '<div class="top">' +
+              `<span class="symbol">Sell ${p.symbol}</span>` +
+              `<span class="value">Owned: ${p.quantity}</span>` +
+              "</div>" +
+              '<div class="sell-row">' +
+              `<input class="sell-qty" type="number" min="1" max="${p.quantity}" value="1" />` +
+              `<button class="sell-btn" data-symbol="${p.symbol}" data-max="${p.quantity}">Confirm</button>` +
+              '<button class="cancel-sell-btn">Back</button>' +
+              "</div>" +
+              '<div class="sell-error" aria-live="polite"></div>' +
+              "</div>" +
               "</div>";
             portfolioListEl.appendChild(item);
           }
+
+          portfolioListEl.querySelectorAll(".portfolio-item").forEach((el) => {
+            const cancelBtn = el.querySelector(".cancel-sell-btn");
+            const sellBtn = el.querySelector(".sell-btn");
+            const qtyInput = el.querySelector(".sell-qty");
+
+            el.addEventListener("click", function (e) {
+              const inSellRow = e.target.closest(".sell-row");
+              if (el.classList.contains("flipped")) {
+                if (inSellRow) return;
+                el.classList.remove("flipped");
+                const sellErr = el.querySelector(".sell-error");
+                if (sellErr) sellErr.textContent = "";
+                return;
+              }
+              if (!inSellRow) {
+                el.classList.add("flipped");
+              }
+            });
+
+            cancelBtn?.addEventListener("click", function (e) {
+              e.stopPropagation();
+              el.classList.remove("flipped");
+              const sellErr = el.querySelector(".sell-error");
+              if (sellErr) sellErr.textContent = "";
+            });
+
+            sellBtn?.addEventListener("click", async function (e) {
+              e.stopPropagation();
+              const sellErr = el.querySelector(".sell-error");
+              const symbol = sellBtn.dataset.symbol;
+              const maxOwned = Number(sellBtn.dataset.max || 0);
+              const qty = Number(qtyInput?.value || 0);
+              if (sellErr) sellErr.textContent = "";
+              if (!Number.isInteger(qty) || qty <= 0) {
+                if (sellErr) sellErr.textContent = "Sell quantity must be a positive whole number.";
+                return;
+              }
+              if (qty > maxOwned) {
+                if (sellErr)
+                  sellErr.textContent = `You only own ${maxOwned} shares of ${symbol}. Cannot sell ${qty}.`;
+                return;
+              }
+
+              try {
+                const res = await fetch("{% url 'sell_stock' %}", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    Accept: "application/json",
+                  },
+                  body: JSON.stringify({
+                    symbol,
+                    quantity: qty,
+                  }),
+                });
+                const payload = await res.json();
+                if (!res.ok) throw new Error(payload?.error || "Sell failed");
+
+                if (sellErr) sellErr.textContent = "";
+                setBuyMeta(
+                  `Sold ${payload.quantity_sold} ${payload.symbol} @ ${formatStardust2(payload.price_per_share)} ` +
+                    `(+${formatStardust2(payload.total_proceeds)} stardust).`,
+                  false
+                );
+                if (stardustBadgeEl) {
+                  stardustBadgeEl.textContent = "Stardust: " + formatStardustBadge(payload.remaining_stardust);
+                }
+                await loadPortfolio();
+              } catch (err) {
+                if (sellErr) sellErr.textContent = err?.message || "Sell failed.";
+              }
+            });
+          });
         }
 
         async function loadPortfolio() {
@@ -772,8 +1100,8 @@
           statusEl.textContent = "";
           try {
             const url =
-              "{% url 'aapl_chart' %}?symbol=" +
-              encodeURIComponent(symbol || "AAPL") +
+              "{% url 'stock_chart' %}?symbol=" +
+              encodeURIComponent(symbol || "SPY") +
               "&timeframe=" +
               encodeURIComponent(timeframe || "w") +
               "&points=" +
@@ -792,7 +1120,10 @@
             currentSymbol = payload?.symbol || currentSymbol;
             currentPrice = Number((payload?.closes || []).slice(-1)[0] || 0);
             if (currentPrice > 0) {
-              buyMetaEl.textContent = `Selected: ${currentSymbol} | Last close: ${currentPrice.toFixed(2)} stardust`;
+              setBuyMeta(
+                `Selected: ${currentSymbol} | Last close: ${formatStardust2(currentPrice)} stardust`,
+                false
+              );
             }
 
             const values = (payload.closes || []).map(Number).filter((n) => Number.isFinite(n));
@@ -851,7 +1182,7 @@
                       callbacks: {
                         label: function (context) {
                           const v = context.parsed.y;
-                          return " Close: " + Number(v).toFixed(2);
+                          return " Close: " + formatStardust2(v);
                         },
                       },
                     },
@@ -890,12 +1221,12 @@
         buyBtnEl.addEventListener("click", async function () {
           const qty = Number(buyQtyEl.value);
           if (!Number.isInteger(qty) || qty <= 0) {
-            buyMetaEl.textContent = "Quantity must be a positive whole number.";
+            setBuyMeta("Quantity must be a positive whole number.", true);
             return;
           }
 
           buyBtnEl.disabled = true;
-          buyMetaEl.textContent = "";
+          setBuyMeta("", false);
           try {
             const res = await fetch("{% url 'buy_stock' %}", {
               method: "POST",
@@ -912,15 +1243,17 @@
             const payload = await res.json();
             if (!res.ok) throw new Error(payload?.error || "Buy failed");
 
-            buyMetaEl.textContent =
-              `Bought ${payload.quantity_bought} ${payload.symbol} @ ${payload.price_per_share} ` +
-              `(${payload.total_cost} stardust).`;
+            setBuyMeta(
+              `Bought ${payload.quantity_bought} ${payload.symbol} @ ${formatStardust2(payload.price_per_share)} ` +
+                `(${formatStardust2(payload.total_cost)} stardust).`,
+              false
+            );
             if (stardustBadgeEl) {
-              stardustBadgeEl.textContent = `Stardust: ${payload.remaining_stardust}`;
+              stardustBadgeEl.textContent = "Stardust: " + formatStardustBadge(payload.remaining_stardust);
             }
             loadPortfolio();
           } catch (e) {
-            buyMetaEl.textContent = "Buy failed: " + (e?.message || "Unknown error");
+            setBuyMeta(e?.message || "Unknown error", true);
           } finally {
             buyBtnEl.disabled = false;
           }
@@ -930,6 +1263,99 @@
         setActiveTimeframeButton(currentTimeframe);
         loadChart(currentSymbol, currentTimeframe, Number(slider.value));
         loadPortfolio();
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const messagesEl = document.getElementById("advisorMessages");
+        const inputEl = document.getElementById("advisorInput");
+        const sendBtn = document.getElementById("advisorSendBtn");
+        const clearBtn = document.getElementById("advisorClearBtn");
+        if (!messagesEl || !inputEl || !sendBtn || !clearBtn) return;
+
+        const chatUrl = "{% url 'advisor_chat' %}";
+
+        function getCookie(name) {
+          const v = `; ${document.cookie}`;
+          const parts = v.split(`; ${name}=`);
+          if (parts.length === 2) return parts.pop().split(";").shift();
+          return "";
+        }
+
+        function addBubble(role, text) {
+          const div = document.createElement("div");
+          div.className = `advisor-bubble ${role}`;
+          div.textContent = text;
+          messagesEl.appendChild(div);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        let history = [];
+
+        function setBusy(busy) {
+          sendBtn.disabled = busy;
+          sendBtn.textContent = busy ? "Thinking..." : "Send";
+          inputEl.disabled = busy;
+        }
+
+        clearBtn.addEventListener("click", function () {
+          messagesEl.innerHTML = "";
+          history = [];
+          addBubble(
+            "assistant",
+            "Ask me what to buy/sell. I'll use your current stardust and holdings and suggest real stock/ETF tickers."
+          );
+        });
+
+        // Initial greeting
+        addBubble(
+          "assistant",
+          "Ask me what to buy/sell. I'll use your current stardust and holdings and suggest real stock/ETF tickers."
+        );
+
+        async function send() {
+          const msg = (inputEl.value || "").trim();
+          if (!msg) return;
+          inputEl.value = "";
+          addBubble("user", msg);
+          history.push({ role: "user", content: msg });
+
+          setBusy(true);
+          try {
+            const res = await fetch(chatUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+                Accept: "application/json",
+              },
+              body: JSON.stringify({
+                message: msg,
+                history: history.slice(-10),
+              }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(payload?.error || "Advisor request failed");
+
+            const reply = payload?.reply || "No reply.";
+            addBubble("assistant", reply);
+            history.push({ role: "assistant", content: reply });
+          } catch (e) {
+            const errText = e?.message || "Advisor request failed.";
+            addBubble("assistant", "Error: " + errText);
+          } finally {
+            setBusy(false);
+          }
+        }
+
+        sendBtn.addEventListener("click", send);
+        inputEl.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        });
       })();
     </script>
   </body>
