@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from .alphavantage import fetch_weekly_candles
+from .yahoo_data import fetch_weekly_candles, search_symbols
 
 @login_required
 def home(request):
@@ -31,10 +31,19 @@ def signup(request):
 @login_required
 def aapl_chart(request):
     """
-    Return weekly AAPL series for Chart.js using Alpha Vantage.
+    Return weekly selected-symbol series for Chart.js using Yahoo Finance.
     """
-    symbol = "AAPL"
+    symbol = (request.GET.get("symbol") or "AAPL").upper().strip()
     try:
         return JsonResponse(fetch_weekly_candles(symbol=symbol, points=52))
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def symbol_search(request):
+    query = request.GET.get("q", "")
+    try:
+        return JsonResponse(search_symbols(query=query, limit=8))
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)

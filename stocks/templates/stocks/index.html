@@ -190,6 +190,64 @@
         margin-bottom: 10px;
       }
 
+      .search-wrap {
+        position: relative;
+        margin: 0 0 12px;
+      }
+
+      .symbol-search {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid rgba(181, 155, 255, 0.28);
+        background: rgba(0, 0, 0, 0.45);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 10px 12px;
+        outline: none;
+      }
+
+      .symbol-search:focus {
+        border-color: rgba(181, 155, 255, 0.6);
+        box-shadow: 0 0 0 2px rgba(181, 155, 255, 0.15);
+      }
+
+      .search-results {
+        position: absolute;
+        left: 0;
+        right: 0;
+        margin-top: 6px;
+        background: rgba(10, 10, 18, 0.96);
+        border: 1px solid rgba(181, 155, 255, 0.25);
+        border-radius: 10px;
+        overflow: hidden;
+        z-index: 20;
+        display: none;
+      }
+
+      .search-results.open {
+        display: block;
+      }
+
+      .search-item {
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+
+      .search-item:hover {
+        background: rgba(138, 92, 255, 0.12);
+      }
+
+      .search-item small {
+        color: var(--muted);
+        display: block;
+        margin-top: 3px;
+      }
+
       .loading {
         color: var(--muted);
         font-size: 14px;
@@ -235,6 +293,17 @@
       <p>Paper stocks (virtual trading) app is running.</p>
 
       <div class="chart-card">
+        <div class="search-wrap">
+          <input
+            id="symbolSearch"
+            class="symbol-search"
+            type="text"
+            autocomplete="off"
+            placeholder="Search ticker (e.g. AAPL, MSFT, TSLA)"
+          />
+          <div id="searchResults" class="search-results"></div>
+        </div>
+
         <div class="chart-title" id="chartTitle">Loading symbol... - Weekly Closing Price</div>
         <div id="chartStatus" class="loading">Loading chart...</div>
         <div class="chart-canvas-wrap">
@@ -274,80 +343,158 @@
     </script>
 
     <script>
-      (async function () {
+      (function () {
         const statusEl = document.getElementById("chartStatus");
         const canvas = document.getElementById("aaplChart");
-        if (!statusEl || !canvas) return;
+        const input = document.getElementById("symbolSearch");
+        const resultsEl = document.getElementById("searchResults");
+        const titleEl = document.getElementById("chartTitle");
+        if (!statusEl || !canvas || !input || !resultsEl) return;
 
-        try {
-          const res = await fetch("{% url 'aapl_chart' %}", {
-            headers: { Accept: "application/json" },
-          });
-          const payload = await res.json();
+        let chart = null;
+        let debounceTimer = null;
 
-          if (!res.ok) {
-            throw new Error(payload?.error || "Failed to fetch chart data");
+        function hideResults() {
+          resultsEl.classList.remove("open");
+          resultsEl.innerHTML = "";
+        }
+
+        function showResults(items) {
+          if (!items?.length) {
+            hideResults();
+            return;
           }
 
-          statusEl.textContent = "Chart loaded";
-
-          if (payload?.symbol) {
-            const titleEl = document.getElementById("chartTitle");
-            if (titleEl) titleEl.textContent = payload.symbol + " - Weekly Closing Price";
+          resultsEl.innerHTML = "";
+          for (const item of items) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "search-item";
+            btn.innerHTML =
+              "<strong>" +
+              item.symbol +
+              "</strong> - " +
+              item.name +
+              "<small>" +
+              (item.region || "Unknown region") +
+              (item.currency ? " | " + item.currency : "") +
+              "</small>";
+            btn.addEventListener("click", function () {
+              input.value = item.symbol;
+              hideResults();
+              loadChart(item.symbol);
+            });
+            resultsEl.appendChild(btn);
           }
+          resultsEl.classList.add("open");
+        }
 
-          const ctx = canvas.getContext("2d");
-          const chart = new Chart(ctx, {
-            type: "line",
-            data: {
-              labels: payload.labels,
-              datasets: [
-                {
-                  label: "AAPL Close",
-                  data: payload.closes,
-                  borderColor: "rgba(181, 155, 255, 1)",
-                  backgroundColor: "rgba(181, 155, 255, 0.12)",
-                  fill: true,
-                  tension: 0.3,
-                  pointRadius: 0,
-                },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              animation: false,
-              plugins: {
-                legend: {
-                  labels: {
-                    color: "#b59bff",
+        async function runSearch(query) {
+          if (!query || query.length < 2) {
+            hideResults();
+            return;
+          }
+          try {
+            const res = await fetch(
+              "{% url 'symbol_search' %}?q=" + encodeURIComponent(query),
+              { headers: { Accept: "application/json" } }
+            );
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.error || "Search failed");
+            showResults(payload.results || []);
+          } catch (e) {
+            hideResults();
+          }
+        }
+
+        input.addEventListener("input", function (e) {
+          const q = e.target.value.trim();
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(function () {
+            runSearch(q);
+          }, 220);
+        });
+
+        document.addEventListener("click", function (e) {
+          if (!resultsEl.contains(e.target) && e.target !== input) hideResults();
+        });
+
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            hideResults();
+            const symbol = input.value.trim().toUpperCase();
+            if (symbol) loadChart(symbol);
+          }
+        });
+
+        async function loadChart(symbol) {
+          statusEl.textContent = "Loading chart...";
+          try {
+            const url = "{% url 'aapl_chart' %}?symbol=" + encodeURIComponent(symbol || "AAPL");
+            const res = await fetch(url, { headers: { Accept: "application/json" } });
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.error || "Failed to fetch chart data");
+
+            statusEl.textContent = "Chart loaded";
+            if (titleEl && payload?.symbol) {
+              titleEl.textContent = payload.symbol + " - Weekly Closing Price";
+            }
+
+            if (chart) chart.destroy();
+            const ctx = canvas.getContext("2d");
+            chart = new Chart(ctx, {
+              type: "line",
+              data: {
+                labels: payload.labels,
+                datasets: [
+                  {
+                    label: (payload?.symbol || "Stock") + " Weekly Close",
+                    data: payload.closes,
+                    borderColor: "rgba(181, 155, 255, 1)",
+                    backgroundColor: "rgba(181, 155, 255, 0.12)",
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
                   },
-                },
-                tooltip: {
-                  callbacks: {
-                    label: function (context) {
-                      const v = context.parsed.y;
-                      return " Close: " + v;
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                  legend: {
+                    labels: { color: "#b59bff" },
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: function (context) {
+                        const v = context.parsed.y;
+                        return " Close: " + v;
+                      },
                     },
                   },
                 },
-              },
-              scales: {
-                x: {
-                  ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
-                  grid: { color: "rgba(181, 155, 255, 0.12)" },
+                scales: {
+                  x: {
+                    ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
+                    grid: { color: "rgba(181, 155, 255, 0.12)" },
+                  },
+                  y: {
+                    ticks: { color: "#8e8ea8" },
+                    grid: { color: "rgba(181, 155, 255, 0.12)" },
+                  },
                 },
-                y: {
-                  ticks: { color: "#8e8ea8" },
-                  grid: { color: "rgba(181, 155, 255, 0.12)" },
-                },
               },
-            },
-          });
-        } catch (e) {
-          console.error(e);
-          statusEl.textContent = "Could not load chart: " + (e?.message || "Unknown error");
+            });
+          } catch (e) {
+            console.error(e);
+            statusEl.textContent = "Could not load chart: " + (e?.message || "Unknown error");
+          }
         }
+
+        loadChart("AAPL");
       })();
     </script>
   </body>
