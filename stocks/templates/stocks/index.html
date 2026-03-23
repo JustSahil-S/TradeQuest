@@ -175,11 +175,11 @@
       }
 
       .chart-canvas-wrap {
-        height: 110px;
+        height: 250px;
       }
 
       .chart-canvas-wrap canvas {
-        height: 110px !important;
+        height: 250px !important;
         width: 100% !important;
         display: block;
       }
@@ -252,6 +252,78 @@
         color: var(--muted);
         font-size: 14px;
       }
+
+      .chart-controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+
+      .tf-group {
+        display: flex;
+        gap: 8px;
+      }
+
+      .tf-btn {
+        border: 1px solid rgba(181, 155, 255, 0.28);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 7px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .tf-btn.active {
+        background: rgba(138, 92, 255, 0.22);
+        border-color: rgba(181, 155, 255, 0.65);
+        color: #ddd2ff;
+      }
+
+      .zoom-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 260px;
+      }
+
+      .zoom-wrap label {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .zoom-wrap input[type="range"] {
+        flex: 1;
+        accent-color: #b59bff;
+        height: 24px;
+      }
+
+      .zoom-wrap input[type="range"]::-webkit-slider-runnable-track {
+        height: 6px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(138, 92, 255, 0.95), rgba(181, 155, 255, 0.95));
+      }
+
+      .zoom-wrap input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: #efe9ff;
+        border: 2px solid #7f59e8;
+        margin-top: -4px;
+      }
+
+      .zoom-value {
+        font-size: 12px;
+        color: var(--purple-2);
+        min-width: 72px;
+        text-align: right;
+      }
     </style>
   </head>
   <body>
@@ -304,8 +376,20 @@
           <div id="searchResults" class="search-results"></div>
         </div>
 
+        <div class="chart-controls">
+          <div class="tf-group">
+            <button type="button" class="tf-btn" data-timeframe="d">Days</button>
+            <button type="button" class="tf-btn active" data-timeframe="w">Weeks</button>
+            <button type="button" class="tf-btn" data-timeframe="m">Months</button>
+          </div>
+          <div class="zoom-wrap">
+            <label for="zoomSlider">Zoom</label>
+            <input id="zoomSlider" type="range" min="20" max="120" step="1" value="52" />
+          </div>
+        </div>
+
         <div class="chart-title" id="chartTitle">Loading symbol... - Weekly Closing Price</div>
-        <div id="chartStatus" class="loading">Loading chart...</div>
+        <div id="chartStatus" class="loading"></div>
         <div class="chart-canvas-wrap">
           <canvas id="aaplChart"></canvas>
         </div>
@@ -349,10 +433,36 @@
         const input = document.getElementById("symbolSearch");
         const resultsEl = document.getElementById("searchResults");
         const titleEl = document.getElementById("chartTitle");
-        if (!statusEl || !canvas || !input || !resultsEl) return;
+        const slider = document.getElementById("zoomSlider");
+        const tfButtons = Array.from(document.querySelectorAll(".tf-btn"));
+        if (!statusEl || !canvas || !input || !resultsEl || !slider || !tfButtons.length) return;
 
         let chart = null;
         let debounceTimer = null;
+        let currentSymbol = "AAPL";
+        let currentTimeframe = "w";
+
+        const timeframeConfig = {
+          d: { min: 20, max: 200, defaultPoints: 90, label: "Daily" },
+          w: { min: 20, max: 260, defaultPoints: 52, label: "Weekly" },
+          m: { min: 12, max: 180, defaultPoints: 48, label: "Monthly" },
+        };
+
+        function applyTimeframeConfig(tf, resetValue) {
+          const cfg = timeframeConfig[tf] || timeframeConfig.w;
+          slider.min = String(cfg.min);
+          slider.max = String(cfg.max);
+          if (resetValue) {
+            slider.value = String(cfg.defaultPoints);
+          } else {
+            const v = Math.max(cfg.min, Math.min(cfg.max, Number(slider.value || cfg.defaultPoints)));
+            slider.value = String(v);
+          }
+        }
+
+        function setActiveTimeframeButton(tf) {
+          tfButtons.forEach((b) => b.classList.toggle("active", b.dataset.timeframe === tf));
+        }
 
         function hideResults() {
           resultsEl.classList.remove("open");
@@ -382,7 +492,8 @@
             btn.addEventListener("click", function () {
               input.value = item.symbol;
               hideResults();
-              loadChart(item.symbol);
+              currentSymbol = item.symbol;
+              loadChart(currentSymbol, currentTimeframe, Number(slider.value));
             });
             resultsEl.appendChild(btn);
           }
@@ -424,22 +535,57 @@
             e.preventDefault();
             hideResults();
             const symbol = input.value.trim().toUpperCase();
-            if (symbol) loadChart(symbol);
+            if (symbol) {
+              currentSymbol = symbol;
+              loadChart(currentSymbol, currentTimeframe, Number(slider.value));
+            }
           }
         });
 
-        async function loadChart(symbol) {
-          statusEl.textContent = "Loading chart...";
+        tfButtons.forEach((btn) => {
+          btn.addEventListener("click", function () {
+            const tf = btn.dataset.timeframe;
+            if (!tf || tf === currentTimeframe) return;
+            currentTimeframe = tf;
+            setActiveTimeframeButton(tf);
+            applyTimeframeConfig(tf, true);
+            loadChart(currentSymbol, currentTimeframe, Number(slider.value));
+          });
+        });
+
+        slider.addEventListener("change", function () {
+          loadChart(currentSymbol, currentTimeframe, Number(slider.value));
+        });
+
+        async function loadChart(symbol, timeframe, points) {
+          statusEl.textContent = "";
           try {
-            const url = "{% url 'aapl_chart' %}?symbol=" + encodeURIComponent(symbol || "AAPL");
+            const url =
+              "{% url 'aapl_chart' %}?symbol=" +
+              encodeURIComponent(symbol || "AAPL") +
+              "&timeframe=" +
+              encodeURIComponent(timeframe || "w") +
+              "&points=" +
+              encodeURIComponent(String(points || 52));
             const res = await fetch(url, { headers: { Accept: "application/json" } });
             const payload = await res.json();
             if (!res.ok) throw new Error(payload?.error || "Failed to fetch chart data");
 
-            statusEl.textContent = "Chart loaded";
+            statusEl.textContent = "";
             if (titleEl && payload?.symbol) {
-              titleEl.textContent = payload.symbol + " - Weekly Closing Price";
+              const tfLabel = payload?.timeframe_label
+                ? payload.timeframe_label.charAt(0).toUpperCase() + payload.timeframe_label.slice(1)
+                : "Price";
+              titleEl.textContent = payload.symbol + " - " + tfLabel + " Closing Price";
             }
+
+            const values = (payload.closes || []).map(Number).filter((n) => Number.isFinite(n));
+            const minV = Math.min(...values);
+            const maxV = Math.max(...values);
+            const range = Math.max(1, maxV - minV);
+            const pad = range * 0.12;
+            const yMin = Math.max(0, minV - pad);
+            const yMax = maxV + pad;
 
             if (chart) chart.destroy();
             const ctx = canvas.getContext("2d");
@@ -449,7 +595,7 @@
                 labels: payload.labels,
                 datasets: [
                   {
-                    label: (payload?.symbol || "Stock") + " Weekly Close",
+                    label: "",
                     data: payload.closes,
                     borderColor: "rgba(181, 155, 255, 1)",
                     backgroundColor: "rgba(181, 155, 255, 0.12)",
@@ -465,6 +611,7 @@
                 animation: false,
                 plugins: {
                   legend: {
+                    display: false,
                     labels: { color: "#b59bff" },
                   },
                   tooltip: {
@@ -478,11 +625,13 @@
                 },
                 scales: {
                   x: {
-                    ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
+                    ticks: { color: "#8e8ea8", maxTicksLimit: 8 },
                     grid: { color: "rgba(181, 155, 255, 0.12)" },
                   },
                   y: {
-                    ticks: { color: "#8e8ea8" },
+                    min: yMin,
+                    max: yMax,
+                    ticks: { color: "#8e8ea8", maxTicksLimit: 6 },
                     grid: { color: "rgba(181, 155, 255, 0.12)" },
                   },
                 },
@@ -494,7 +643,9 @@
           }
         }
 
-        loadChart("AAPL");
+        applyTimeframeConfig(currentTimeframe, true);
+        setActiveTimeframeButton(currentTimeframe);
+        loadChart(currentSymbol, currentTimeframe, Number(slider.value));
       })();
     </script>
   </body>

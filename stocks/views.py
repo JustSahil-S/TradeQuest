@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from .yahoo_data import fetch_weekly_candles, search_symbols
+from .yahoo_data import fetch_candles, search_symbols
 
 @login_required
 def home(request):
@@ -31,11 +31,18 @@ def signup(request):
 @login_required
 def aapl_chart(request):
     """
-    Return weekly selected-symbol series for Chart.js using Yahoo Finance.
+    Return selected-symbol series for Chart.js using Yahoo Finance.
     """
     symbol = (request.GET.get("symbol") or "AAPL").upper().strip()
+    timeframe = (request.GET.get("timeframe") or "w").lower().strip()
+    points_raw = request.GET.get("points") or "52"
     try:
-        return JsonResponse(fetch_weekly_candles(symbol=symbol, points=52))
+        points = int(points_raw)
+    except ValueError:
+        return JsonResponse({"error": "Invalid points value"}, status=400)
+
+    try:
+        return JsonResponse(fetch_candles(symbol=symbol, timeframe=timeframe, points=points))
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
