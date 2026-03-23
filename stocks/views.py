@@ -32,18 +32,36 @@ def signup(request):
 @login_required
 def aapl_chart(request):
     """
-    Return candle series for AAPL for Chart.js.
-    """
-    symbol = "AAPL"
-    try:
-        series = fetch_candles(symbol=symbol, resolution="D", days=30)
-    except Exception as e:
-        if settings.DEBUG:
-            # For local development: fall back to mock data so the UI wiring works.
-            series = mock_candles(symbol=symbol, days=30)
-            series["note"] = f"Finnhub fallback due to: {e}"
-        else:
-            # Keep the error payload JSON so the front-end can display/log it.
-            return JsonResponse({"error": str(e)}, status=500)
+    Return candle series for a symbol for Chart.js.
 
-    return JsonResponse(series)
+    We try a small list of popular tickers and return the first one Finnhub
+    allows for the current API key/plan.
+    """
+    symbols_to_try = [
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "TSLA",
+        "AMZN",
+        "META",
+        "AMD",
+        "NFLX",
+        "GOOGL",
+        "SPY",
+    ]
+
+    last_exc = None
+    for symbol in symbols_to_try:
+        try:
+            return JsonResponse(fetch_candles(symbol=symbol, resolution="D", days=30))
+        except Exception as e:
+            last_exc = e
+
+    # If none of the tickers work, fall back (DEBUG) so the UI can be verified.
+    if settings.DEBUG:
+        fallback_symbol = "AAPL"
+        series = mock_candles(symbol=fallback_symbol, days=30)
+        series["note"] = f"Finnhub fallback (no symbol succeeded). Last error: {last_exc}"
+        return JsonResponse(series)
+
+    return JsonResponse({"error": str(last_exc) if last_exc else "Finnhub error"}, status=500)

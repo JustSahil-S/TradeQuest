@@ -174,6 +174,16 @@
         border: 1px solid rgba(181, 155, 255, 0.2);
       }
 
+      .chart-canvas-wrap {
+        height: 110px;
+      }
+
+      .chart-canvas-wrap canvas {
+        height: 110px !important;
+        width: 100% !important;
+        display: block;
+      }
+
       .chart-title {
         font-weight: 700;
         color: var(--purple-2);
@@ -225,9 +235,11 @@
       <p>Paper stocks (virtual trading) app is running.</p>
 
       <div class="chart-card">
-        <div class="chart-title">AAPL (Apples) - Closing Price</div>
+        <div class="chart-title" id="chartTitle">Loading symbol... - Closing Price</div>
         <div id="chartStatus" class="loading">Loading chart...</div>
-        <canvas id="aaplChart" height="110"></canvas>
+        <div class="chart-canvas-wrap">
+          <canvas id="aaplChart"></canvas>
+        </div>
       </div>
     </div>
 
@@ -282,6 +294,11 @@
             statusEl.textContent += " - " + payload.note;
           }
 
+          if (payload?.symbol) {
+            const titleEl = document.getElementById("chartTitle");
+            if (titleEl) titleEl.textContent = payload.symbol + " - Closing Price";
+          }
+
           const ctx = canvas.getContext("2d");
           const chart = new Chart(ctx, {
             type: "line",
@@ -302,6 +319,7 @@
             options: {
               responsive: true,
               maintainAspectRatio: false,
+              animation: false,
               plugins: {
                 legend: {
                   labels: {

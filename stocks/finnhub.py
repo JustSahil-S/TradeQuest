@@ -54,7 +54,11 @@ def fetch_candles(symbol: str, resolution: str = "D", days: int = 30) -> dict:
 
     # Finnhub arrays should align; still, be defensive.
     n = min(len(labels), len(closes))
-    return {"labels": labels[:n], "closes": closes[:n]}
+    return {
+        "labels": labels[:n],
+        "closes": closes[:n],
+        "symbol": symbol,
+    }
 
 
 def mock_candles(symbol: str, days: int = 30) -> dict:
