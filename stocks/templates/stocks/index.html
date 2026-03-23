@@ -4,16 +4,236 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TradeQuest</title>
+    <style>
+      :root {
+        --bg: #05050a;
+        --panel: rgba(16, 16, 28, 0.7);
+        --text: #c9c9d8;
+        --muted: #8e8ea8;
+        --purple: #8a5cff;
+        --purple-2: #b59bff;
+      }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+          Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--text);
+        background: radial-gradient(
+            circle at 20% 10%,
+            rgba(138, 92, 255, 0.18),
+            transparent 35%
+          ),
+          radial-gradient(circle at 70% 60%, rgba(138, 92, 255, 0.12), transparent 40%),
+          var(--bg);
+        min-height: 100vh;
+      }
+
+      /* Simple "space dust" stars without external assets */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image: radial-gradient(rgba(255, 255, 255, 0.7) 1px, transparent 1px);
+        background-size: 120px 120px;
+        opacity: 0.12;
+      }
+
+      .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 20px;
+        background: #000;
+        border-bottom: 1px solid rgba(181, 155, 255, 0.25);
+      }
+
+      .brand-button {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 220px;
+        padding: 0;
+        background: transparent;
+        color: inherit;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(138, 92, 255, 1), rgba(181, 155, 255, 0.6));
+        box-shadow: 0 0 0 2px rgba(138, 92, 255, 0.2);
+        display: grid;
+        place-items: center;
+      }
+
+      .avatar svg {
+        width: 18px;
+        height: 18px;
+        color: #0b0b12;
+      }
+
+      .username {
+        font-weight: 650;
+        color: var(--purple-2);
+        line-height: 1.1;
+      }
+
+      .right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .profile-menu-wrap {
+        position: relative;
+        display: inline-flex;
+      }
+
+      .profile-menu {
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 0;
+        min-width: 210px;
+        background: rgba(0, 0, 0, 0.92);
+        border: 1px solid rgba(181, 155, 255, 0.25);
+        border-radius: 14px;
+        box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55);
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(-6px);
+        pointer-events: none;
+        transition: opacity 120ms ease, transform 120ms ease;
+      }
+
+      .profile-menu.open {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+
+      .profile-menu-item {
+        width: 100%;
+        padding: 12px 14px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--text);
+        font-weight: 600;
+        text-align: left;
+      }
+
+      .profile-menu-item:hover {
+        background: rgba(138, 92, 255, 0.12);
+      }
+
+      .profile-menu-form {
+        margin: 0;
+      }
+
+      .stardust {
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(138, 92, 255, 0.12);
+        border: 1px solid rgba(138, 92, 255, 0.28);
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .content {
+        padding: 26px 20px 60px;
+        max-width: 900px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        letter-spacing: 0.2px;
+        color: var(--purple-2);
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+    </style>
   </head>
   <body>
-    <h1>TradeQuest</h1>
-    <p>Paper stocks (virtual trading) app is running.</p>
+    <div class="navbar">
+      <div class="profile-menu-wrap">
+        <button
+          type="button"
+          class="brand-button"
+          id="profileMenuButton"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="profileMenu"
+        >
+          <div class="avatar" aria-hidden="true">
+            <!-- Minimal "profile" icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21a8 8 0 0 0-16 0" />
+              <circle cx="12" cy="8" r="4" />
+            </svg>
+          </div>
+          <div class="username">{{ user.username }}</div>
+        </button>
 
-    {% if user.is_authenticated %}
-      <p>Your stardust: {{ user.profile.stardust_balance }}</p>
-    {% else %}
-      <p><a href="{% url 'login' %}">Sign in</a> or <a href="{% url 'signup' %}">create an account</a>.</p>
-    {% endif %}
+        <div class="profile-menu" id="profileMenu" role="menu" aria-labelledby="profileMenuButton">
+          <form method="post" action="{% url 'logout' %}" class="profile-menu-form">
+            {% csrf_token %}
+            <button type="submit" class="profile-menu-item" role="menuitem">Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="stardust">Stardust: {{ user.profile.stardust_balance }}</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <h1>TradeQuest</h1>
+      <p>Paper stocks (virtual trading) app is running.</p>
+    </div>
+
+    <script>
+      (function () {
+        const btn = document.getElementById("profileMenuButton");
+        const menu = document.getElementById("profileMenu");
+        if (!btn || !menu) return;
+
+        function closeMenu() {
+          menu.classList.remove("open");
+          btn.setAttribute("aria-expanded", "false");
+        }
+
+        function toggleMenu(e) {
+          e.stopPropagation();
+          const isOpen = menu.classList.toggle("open");
+          btn.setAttribute("aria-expanded", String(isOpen));
+        }
+
+        btn.addEventListener("click", toggleMenu);
+
+        document.addEventListener("click", function (e) {
+          if (!menu.contains(e.target) && !btn.contains(e.target)) closeMenu();
+        });
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") closeMenu();
+        });
+      })();
+    </script>
   </body>
 </html>
 

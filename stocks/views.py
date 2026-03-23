@@ -1,11 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+@login_required
 def home(request):
-    # Simple landing page to verify the app wiring.
     return render(request, "stocks/index.html")
 
 
