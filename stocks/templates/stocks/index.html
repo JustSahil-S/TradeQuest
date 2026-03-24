@@ -149,9 +149,56 @@
         font-weight: 600;
       }
 
+      .nav-link-pill {
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(181, 155, 255, 0.28);
+        background: rgba(0, 0, 0, 0.22);
+        color: var(--text);
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .nav-link-pill:hover {
+        background: rgba(138, 92, 255, 0.16);
+      }
+
       .content {
         padding: 26px 20px 60px;
         max-width: 1200px;
+      }
+
+      .time-travel-panel {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(181, 155, 255, 0.24);
+        background: rgba(16, 16, 28, 0.45);
+        display: grid;
+        gap: 8px;
+      }
+
+      .time-travel-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--purple-2);
+      }
+
+      .time-travel-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .time-travel-row input[type="range"] {
+        flex: 1;
+      }
+
+      .time-travel-date {
+        font-size: 12px;
+        color: var(--text);
+        min-width: 110px;
+        text-align: right;
       }
 
       .dashboard-grid {
@@ -271,7 +318,7 @@
       }
 
       .portfolio-item .sell-btn,
-      .portfolio-item .cancel-sell-btn {
+      .portfolio-item .sell-all-btn {
         border: 1px solid rgba(181, 155, 255, 0.4);
         background: rgba(138, 92, 255, 0.22);
         color: #efe9ff;
@@ -281,8 +328,9 @@
         font-size: 12px;
       }
 
-      .portfolio-item .cancel-sell-btn {
-        background: rgba(0, 0, 0, 0.3);
+      .portfolio-item .sell-all-btn {
+        background: rgba(255, 80, 130, 0.18);
+        border-color: rgba(255, 120, 160, 0.42);
       }
 
       .portfolio-item .sell-error {
@@ -522,6 +570,42 @@
         color: #ddd2ff;
       }
 
+      .advisor-bubble.typing {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 52px;
+      }
+
+      .typing-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(221, 210, 255, 0.9);
+        animation: advisorDotPulse 1s infinite ease-in-out;
+      }
+
+      .typing-dot:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      .typing-dot:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+
+      @keyframes advisorDotPulse {
+        0%,
+        80%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.9);
+        }
+        40% {
+          opacity: 1;
+          transform: scale(1.15);
+        }
+      }
+
       .advisor-input-row {
         display: flex;
         gap: 8px;
@@ -655,6 +739,7 @@
       </div>
 
       <div class="right">
+        <a class="nav-link-pill" href="{% url 'leaderboard' %}">Leaderboard</a>
         <div class="stardust" id="stardustBadge">
           Stardust: {{ user.profile.stardust_balance|floatformat:0 }}
         </div>
@@ -664,6 +749,15 @@
     <div class="content">
       <h1>TradeQuest</h1>
       <p>Paper stocks (virtual trading) app is running.</p>
+      {% if user.is_superuser %}
+      <div class="time-travel-panel" id="timeTravelPanel">
+        <div class="time-travel-title">Admin Time Travel Simulator</div>
+        <div class="time-travel-row">
+          <input id="timeTravelSlider" type="range" min="0" max="1" step="1" value="1" />
+          <div class="time-travel-date" id="timeTravelDateLabel"></div>
+        </div>
+      </div>
+      {% endif %}
 
       <div class="dashboard-grid">
         <div class="chart-card">
@@ -779,6 +873,9 @@
         const stardustBadgeEl = document.getElementById("stardustBadge");
         const portfolioListEl = document.getElementById("portfolioList");
         const portfolioTotalEl = document.getElementById("portfolioTotal");
+        const timeTravelSliderEl = document.getElementById("timeTravelSlider");
+        const timeTravelDateLabelEl = document.getElementById("timeTravelDateLabel");
+        const isAdminTimelineEnabled = Boolean(timeTravelSliderEl);
         if (
           !statusEl ||
           !canvas ||
@@ -799,6 +896,52 @@
         let currentSymbol = "SPY";
         let currentTimeframe = "w";
         let currentPrice = null;
+        let selectedAsOfDate = null;
+
+        function toISODate(d) {
+          return d.toISOString().slice(0, 10);
+        }
+
+        const timelineStartDate = new Date("2000-01-01T00:00:00Z");
+        const timelineEndDate = new Date();
+        timelineEndDate.setHours(0, 0, 0, 0);
+        const dayMs = 24 * 60 * 60 * 1000;
+        const timelineDayCount = Math.max(
+          1,
+          Math.floor((timelineEndDate.getTime() - timelineStartDate.getTime()) / dayMs)
+        );
+
+        function getAsOfParam() {
+          return selectedAsOfDate ? `&as_of=${encodeURIComponent(selectedAsOfDate)}` : "";
+        }
+
+        function renderTimelineLabel() {
+          if (!timeTravelDateLabelEl) return;
+          timeTravelDateLabelEl.textContent = selectedAsOfDate || "Live";
+        }
+
+        function initAdminTimeline() {
+          if (!isAdminTimelineEnabled || !timeTravelSliderEl) return;
+          timeTravelSliderEl.min = "0";
+          timeTravelSliderEl.max = String(timelineDayCount);
+          timeTravelSliderEl.value = String(timelineDayCount);
+          selectedAsOfDate = toISODate(timelineEndDate);
+          renderTimelineLabel();
+
+          const onSlide = function () {
+            const idx = Number(timeTravelSliderEl.value || timelineDayCount);
+            const next = new Date(timelineStartDate.getTime() + idx * dayMs);
+            selectedAsOfDate = toISODate(next);
+            renderTimelineLabel();
+          };
+
+          timeTravelSliderEl.addEventListener("input", onSlide);
+          timeTravelSliderEl.addEventListener("change", function () {
+            onSlide();
+            loadChart(currentSymbol, currentTimeframe, Number(slider.value));
+            loadPortfolio();
+          });
+        }
 
         const timeframeConfig = {
           d: { min: 20, max: 200, defaultPoints: 90, label: "Daily" },
@@ -913,7 +1056,7 @@
               '<div class="sell-row">' +
               `<input class="sell-qty" type="number" min="1" max="${p.quantity}" value="1" />` +
               `<button class="sell-btn" data-symbol="${p.symbol}" data-max="${p.quantity}">Confirm</button>` +
-              '<button class="cancel-sell-btn">Back</button>' +
+              '<button class="sell-all-btn">Sell all</button>' +
               "</div>" +
               '<div class="sell-error" aria-live="polite"></div>' +
               "</div>" +
@@ -922,7 +1065,7 @@
           }
 
           portfolioListEl.querySelectorAll(".portfolio-item").forEach((el) => {
-            const cancelBtn = el.querySelector(".cancel-sell-btn");
+            const sellAllBtn = el.querySelector(".sell-all-btn");
             const sellBtn = el.querySelector(".sell-btn");
             const qtyInput = el.querySelector(".sell-qty");
 
@@ -940,11 +1083,13 @@
               }
             });
 
-            cancelBtn?.addEventListener("click", function (e) {
+            sellAllBtn?.addEventListener("click", function (e) {
               e.stopPropagation();
-              el.classList.remove("flipped");
-              const sellErr = el.querySelector(".sell-error");
-              if (sellErr) sellErr.textContent = "";
+              const maxOwned = Number(sellBtn?.dataset?.max || 0);
+              if (maxOwned > 0 && qtyInput) {
+                qtyInput.value = String(maxOwned);
+              }
+              sellBtn?.click();
             });
 
             sellBtn?.addEventListener("click", async function (e) {
@@ -975,6 +1120,7 @@
                   body: JSON.stringify({
                     symbol,
                     quantity: qty,
+                    as_of: selectedAsOfDate,
                   }),
                 });
                 const payload = await res.json();
@@ -999,7 +1145,9 @@
 
         async function loadPortfolio() {
           try {
-            const res = await fetch("{% url 'portfolio' %}", { headers: { Accept: "application/json" } });
+            const res = await fetch("{% url 'portfolio' %}?_t=1" + getAsOfParam(), {
+              headers: { Accept: "application/json" },
+            });
             const payload = await res.json();
             if (!res.ok) throw new Error(payload?.error || "Failed to load portfolio");
             renderPortfolio(payload);
@@ -1105,7 +1253,8 @@
               "&timeframe=" +
               encodeURIComponent(timeframe || "w") +
               "&points=" +
-              encodeURIComponent(String(points || 52));
+              encodeURIComponent(String(points || 52)) +
+              getAsOfParam();
             const res = await fetch(url, { headers: { Accept: "application/json" } });
             const payload = await res.json();
             if (!res.ok) throw new Error(payload?.error || "Failed to fetch chart data");
@@ -1116,6 +1265,9 @@
                 ? payload.timeframe_label.charAt(0).toUpperCase() + payload.timeframe_label.slice(1)
                 : "Price";
               titleEl.textContent = payload.symbol + " - " + tfLabel + " Closing Price";
+              if (selectedAsOfDate) {
+                titleEl.textContent += " (as of " + selectedAsOfDate + ")";
+              }
             }
             currentSymbol = payload?.symbol || currentSymbol;
             currentPrice = Number((payload?.closes || []).slice(-1)[0] || 0);
@@ -1238,6 +1390,7 @@
               body: JSON.stringify({
                 symbol: currentSymbol,
                 quantity: qty,
+                as_of: selectedAsOfDate,
               }),
             });
             const payload = await res.json();
@@ -1261,6 +1414,7 @@
 
         applyTimeframeConfig(currentTimeframe, true);
         setActiveTimeframeButton(currentTimeframe);
+        initAdminTimeline();
         loadChart(currentSymbol, currentTimeframe, Number(slider.value));
         loadPortfolio();
       })();
@@ -1289,6 +1443,17 @@
           div.textContent = text;
           messagesEl.appendChild(div);
           messagesEl.scrollTop = messagesEl.scrollHeight;
+          return div;
+        }
+
+        function addTypingBubble() {
+          const div = document.createElement("div");
+          div.className = "advisor-bubble assistant typing";
+          div.innerHTML =
+            '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+          messagesEl.appendChild(div);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+          return div;
         }
 
         let history = [];
@@ -1322,6 +1487,7 @@
           history.push({ role: "user", content: msg });
 
           setBusy(true);
+          const typingBubble = addTypingBubble();
           try {
             const res = await fetch(chatUrl, {
               method: "POST",
@@ -1339,10 +1505,12 @@
             if (!res.ok) throw new Error(payload?.error || "Advisor request failed");
 
             const reply = payload?.reply || "No reply.";
+            typingBubble.remove();
             addBubble("assistant", reply);
             history.push({ role: "assistant", content: reply });
           } catch (e) {
             const errText = e?.message || "Advisor request failed.";
+            typingBubble.remove();
             addBubble("assistant", "Error: " + errText);
           } finally {
             setBusy(false);

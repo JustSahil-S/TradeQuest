@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TradeQuest Leaderboard</title>
+    <style>
+      :root {
+        --bg: #05050a;
+        --text: #d0d0de;
+        --muted: #8e8ea8;
+        --purple-2: #b59bff;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        color: var(--text);
+        background: radial-gradient(circle at 20% 10%, rgba(138, 92, 255, 0.18), transparent 35%), var(--bg);
+      }
+      .wrap {
+        max-width: 1100px;
+        padding: 24px 20px 40px;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      h1 {
+        margin: 0;
+        color: var(--purple-2);
+      }
+      .home-link {
+        color: var(--text);
+        text-decoration: none;
+        border: 1px solid rgba(181, 155, 255, 0.28);
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.22);
+      }
+      .sort-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .sort-pill {
+        text-decoration: none;
+        color: var(--text);
+        border: 1px solid rgba(181, 155, 255, 0.28);
+        border-radius: 999px;
+        padding: 7px 10px;
+        font-size: 13px;
+        background: rgba(0, 0, 0, 0.22);
+      }
+      .sort-pill.active {
+        border-color: rgba(181, 155, 255, 0.62);
+        background: rgba(138, 92, 255, 0.2);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid rgba(181, 155, 255, 0.2);
+        border-radius: 12px;
+        overflow: hidden;
+        background: rgba(16, 16, 28, 0.45);
+      }
+      th,
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(181, 155, 255, 0.1);
+        text-align: left;
+        font-size: 14px;
+      }
+      th {
+        color: var(--purple-2);
+        font-weight: 700;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .pos {
+        color: #7dffb3;
+      }
+      .neg {
+        color: #ff8a9d;
+      }
+      .muted {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <h1>Leaderboard</h1>
+        <a class="home-link" href="{% url 'home' %}">Back to Trading</a>
+      </div>
+
+      <div class="sort-row">
+        <a class="sort-pill {% if sort_key == 'stardust' %}active{% endif %}" href="?sort=stardust"
+          >Stardust</a
+        >
+        <a class="sort-pill {% if sort_key == 'networth' %}active{% endif %}" href="?sort=networth"
+          >Networth (cash + assets)</a
+        >
+        <a class="sort-pill {% if sort_key == 'assets' %}active{% endif %}" href="?sort=assets"
+          >Assets only</a
+        >
+        <a class="sort-pill {% if sort_key == 'growth_day' %}active{% endif %}" href="?sort=growth_day"
+          >Growth % (1 day)</a
+        >
+        <a class="sort-pill {% if sort_key == 'growth_week' %}active{% endif %}" href="?sort=growth_week"
+          >Growth % (1 week)</a
+        >
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th>Stardust</th>
+            <th>Assets</th>
+            <th>Networth</th>
+            <th>Growth 1D</th>
+            <th>Growth 1W</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.rank }}</td>
+            <td>{{ r.username }}</td>
+            <td>{{ r.stardust|floatformat:2 }}</td>
+            <td>{{ r.assets|floatformat:2 }}</td>
+            <td>{{ r.networth|floatformat:2 }}</td>
+            <td class="{% if r.growth_day > 0 %}pos{% elif r.growth_day < 0 %}neg{% else %}muted{% endif %}">
+              {{ r.growth_day|floatformat:2 }}%
+            </td>
+            <td class="{% if r.growth_week > 0 %}pos{% elif r.growth_week < 0 %}neg{% else %}muted{% endif %}">
+              {{ r.growth_week|floatformat:2 }}%
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="muted">No players yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

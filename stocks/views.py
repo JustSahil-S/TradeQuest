@@ -2,6 +2,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
@@ -85,9 +86,106 @@ def _ollama_chat(ollama_host: str, model: str, messages: list[dict]) -> str:
     return str(content)
 
 
+def _parse_as_of_date(raw: str | None) -> date | None:
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _effective_as_of(request) -> date | None:
+    """
+    Admin-only timeline support. Non-admin users always use live prices.
+    """
+    if not request.user.is_superuser:
+        return None
+    return _parse_as_of_date(request.GET.get("as_of"))
+
+
+def _pct_growth(current: Decimal, baseline: Decimal) -> Decimal:
+    if baseline <= 0:
+        return Decimal("0")
+    return ((current - baseline) / baseline * Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
 @login_required
 def home(request):
     return render(request, "stocks/index.html")
+
+
+@login_required
+def leaderboard(request):
+    sort_key = (request.GET.get("sort") or "networth").strip().lower()
+    allowed_sorts = {"stardust", "networth", "assets", "growth_day", "growth_week"}
+    if sort_key not in allowed_sorts:
+        sort_key = "networth"
+
+    today = date.today()
+    day_ago = today - timedelta(days=1)
+    week_ago = today - timedelta(days=7)
+
+    rows = []
+    profiles = Profile.objects.select_related("user").all()
+
+    for profile in profiles:
+        positions = Position.objects.filter(user=profile.user)
+        cash = profile.stardust_balance
+        assets_now = Decimal("0")
+        assets_day = Decimal("0")
+        assets_week = Decimal("0")
+
+        for p in positions:
+            qty = Decimal(p.quantity)
+            if qty <= 0:
+                continue
+            try:
+                px_now = _dust_from_float(fetch_latest_price(p.symbol))
+            except Exception:
+                px_now = Decimal("0")
+            try:
+                px_day = _dust_from_float(fetch_latest_price(p.symbol, as_of=day_ago))
+            except Exception:
+                px_day = px_now
+            try:
+                px_week = _dust_from_float(fetch_latest_price(p.symbol, as_of=week_ago))
+            except Exception:
+                px_week = px_day
+
+            assets_now += (qty * px_now).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+            assets_day += (qty * px_day).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+            assets_week += (qty * px_week).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+
+        networth_now = (cash + assets_now).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        networth_day = (cash + assets_day).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        networth_week = (cash + assets_week).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+
+        rows.append(
+            {
+                "username": profile.user.username,
+                "stardust": cash,
+                "assets": assets_now,
+                "networth": networth_now,
+                "growth_day": _pct_growth(networth_now, networth_day),
+                "growth_week": _pct_growth(networth_now, networth_week),
+            }
+        )
+
+    rows.sort(key=lambda r: r[sort_key], reverse=True)
+    for idx, row in enumerate(rows, start=1):
+        row["rank"] = idx
+
+    return render(
+        request,
+        "stocks/leaderboard.html",
+        {
+            "rows": rows,
+            "sort_key": sort_key,
+        },
+    )
 
 
 def signup(request):
@@ -112,6 +210,7 @@ def stock_chart(request):
     """
     symbol = (request.GET.get("symbol") or "SPY").upper().strip()
     timeframe = (request.GET.get("timeframe") or "w").lower().strip()
+    as_of = _effective_as_of(request)
     points_raw = request.GET.get("points") or "52"
     try:
         points = int(points_raw)
@@ -119,7 +218,9 @@ def stock_chart(request):
         return JsonResponse({"error": "Invalid points value"}, status=400)
 
     try:
-        return JsonResponse(fetch_candles(symbol=symbol, timeframe=timeframe, points=points))
+        return JsonResponse(
+            fetch_candles(symbol=symbol, timeframe=timeframe, points=points, as_of=as_of)
+        )
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
@@ -135,13 +236,14 @@ def symbol_search(request):
 
 @login_required
 def portfolio(request):
+    as_of = _effective_as_of(request)
     positions = Position.objects.filter(user=request.user).order_by("symbol")
     items = []
     total_value = Decimal("0")
 
     for p in positions:
         try:
-            latest = fetch_latest_price(p.symbol)
+            latest = fetch_latest_price(p.symbol, as_of=as_of)
             current_price = _dust_from_float(latest)
         except Exception:
             current_price = Decimal("0")
@@ -180,6 +282,7 @@ def buy_stock(request):
         payload = json.loads(request.body.decode("utf-8"))
     except Exception:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+    as_of = _parse_as_of_date(payload.get("as_of")) if request.user.is_superuser else None
 
     symbol = (payload.get("symbol") or "").upper().strip()
     quantity_raw = payload.get("quantity")
@@ -194,7 +297,7 @@ def buy_stock(request):
         return JsonResponse({"error": "Quantity must be greater than 0"}, status=400)
 
     try:
-        market_price = fetch_latest_price(symbol)
+        market_price = fetch_latest_price(symbol, as_of=as_of)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -274,6 +377,7 @@ def sell_stock(request):
         payload = json.loads(request.body.decode("utf-8"))
     except Exception:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+    as_of = _parse_as_of_date(payload.get("as_of")) if request.user.is_superuser else None
 
     symbol = (payload.get("symbol") or "").upper().strip()
     quantity_raw = payload.get("quantity")
@@ -288,7 +392,7 @@ def sell_stock(request):
         return JsonResponse({"error": "Quantity must be greater than 0"}, status=400)
 
     try:
-        market_price = fetch_latest_price(symbol)
+        market_price = fetch_latest_price(symbol, as_of=as_of)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
