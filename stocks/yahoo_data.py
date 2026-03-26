@@ -1,5 +1,34 @@
 import yfinance as yf
+import time
 from datetime import date
+
+_SECTOR_CACHE: dict[str, tuple[float, str]] = {}
+_SECTOR_TTL_SECONDS = 24 * 60 * 60
+
+
+def fetch_sector(symbol: str) -> str:
+    """
+    Best-effort sector lookup via yfinance. Cached to avoid repeated calls.
+    """
+    sym = (symbol or "").upper().strip()
+    if not sym:
+        return "Unknown"
+
+    now = time.time()
+    cached = _SECTOR_CACHE.get(sym)
+    if cached:
+        ts, sector = cached
+        if now - ts < _SECTOR_TTL_SECONDS and sector:
+            return sector
+
+    try:
+        info = yf.Ticker(sym).info or {}
+        sector = (info.get("sector") or "").strip() or "Unknown"
+    except Exception:
+        sector = "Unknown"
+
+    _SECTOR_CACHE[sym] = (now, sector)
+    return sector
 
 
 def fetch_candles(

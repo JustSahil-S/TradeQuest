@@ -55,3 +55,29 @@ class Position(models.Model):
 
     def __str__(self):
         return f"Position(user={self.user.username}, symbol={self.symbol}, qty={self.quantity})"
+
+
+class Trade(models.Model):
+    class Side(models.TextChoices):
+        BUY = "BUY", "Buy"
+        SELL = "SELL", "Sell"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="trades",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # When time travel is used by a superuser, this records the simulated execution date.
+    executed_as_of = models.DateField(null=True, blank=True)
+
+    symbol = models.CharField(max_length=12)
+    side = models.CharField(max_length=4, choices=Side.choices)
+    quantity = models.PositiveIntegerField()
+
+    price_per_share_stardust = models.DecimalField(max_digits=24, decimal_places=8)
+    total_stardust = models.DecimalField(max_digits=24, decimal_places=8)
+
+    def __str__(self):
+        return f"Trade(user={self.user.username}, {self.side} {self.quantity} {self.symbol})"

@@ -15,8 +15,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .models import Position, Profile
-from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols
+from .models import Position, Profile, Trade
+from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols, fetch_sector
 
 # Smallest stardust unit (8 decimal places) for exact arithmetic.
 DUST_Q = Decimal("0.00000001")
@@ -188,6 +188,24 @@ def leaderboard(request):
     )
 
 
+@login_required
+def trade_history(request):
+    trades = (
+        Trade.objects.filter(user=request.user)
+        .order_by("-created_at")
+        .only(
+            "created_at",
+            "executed_as_of",
+            "symbol",
+            "side",
+            "quantity",
+            "price_per_share_stardust",
+            "total_stardust",
+        )
+    )
+    return render(request, "stocks/trade_history.html", {"trades": trades})
+
+
 def signup(request):
     # Basic registration using Django's built-in password validation.
     if request.method == "POST":
@@ -275,6 +293,46 @@ def portfolio(request):
 
 
 @login_required
+def sector_breakdown(request):
+    """
+    Return portfolio sector allocation (by current position value).
+    """
+    as_of = _effective_as_of(request)
+    positions = Position.objects.filter(user=request.user).order_by("symbol")
+
+    totals: dict[str, Decimal] = {}
+    grand_total = Decimal("0")
+
+    for p in positions:
+        if p.quantity <= 0:
+            continue
+        try:
+            px = _dust_from_float(fetch_latest_price(p.symbol, as_of=as_of))
+        except Exception:
+            px = Decimal("0")
+        value = (Decimal(p.quantity) * px).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        if value <= 0:
+            continue
+
+        sector = fetch_sector(p.symbol) or "Unknown"
+        totals[sector] = (totals.get(sector, Decimal("0")) + value).quantize(
+            DUST_Q, rounding=ROUND_HALF_UP
+        )
+        grand_total += value
+
+    items = []
+    for sector, value in sorted(totals.items(), key=lambda kv: kv[1], reverse=True):
+        pct = Decimal("0")
+        if grand_total > 0:
+            pct = (value / grand_total * Decimal("100")).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        items.append({"sector": sector, "value_stardust": _dust_str(value), "pct": str(pct)})
+
+    return JsonResponse({"total_stardust": _dust_str(grand_total), "sectors": items})
+
+
+@login_required
 @require_POST
 @transaction.atomic
 def buy_stock(request):
@@ -355,6 +413,16 @@ def buy_stock(request):
     )
     profile.save(update_fields=["stardust_balance"])
 
+    Trade.objects.create(
+        user=request.user,
+        executed_as_of=as_of,
+        symbol=symbol,
+        side=Trade.Side.BUY,
+        quantity=quantity,
+        price_per_share_stardust=price_per_share,
+        total_stardust=total_cost,
+    )
+
     return JsonResponse(
         {
             "ok": True,
@@ -431,6 +499,16 @@ def sell_stock(request):
         DUST_Q, rounding=ROUND_HALF_UP
     )
     profile.save(update_fields=["stardust_balance"])
+
+    Trade.objects.create(
+        user=request.user,
+        executed_as_of=as_of,
+        symbol=symbol,
+        side=Trade.Side.SELL,
+        quantity=quantity,
+        price_per_share_stardust=price_per_share,
+        total_stardust=proceeds,
+    )
 
     return JsonResponse(
         {

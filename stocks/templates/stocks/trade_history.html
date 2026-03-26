@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TradeQuest - Trade History</title>
+    <style>
+      :root {
+        --bg: #05050a;
+        --text: #d0d0de;
+        --muted: #8e8ea8;
+        --purple-2: #b59bff;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        color: var(--text);
+        background: radial-gradient(circle at 20% 10%, rgba(138, 92, 255, 0.18), transparent 35%), var(--bg);
+      }
+      .wrap {
+        max-width: 1100px;
+        padding: 24px 20px 40px;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      h1 {
+        margin: 0;
+        color: var(--purple-2);
+      }
+      .home-link {
+        color: var(--text);
+        text-decoration: none;
+        border: 1px solid rgba(181, 155, 255, 0.28);
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.22);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid rgba(181, 155, 255, 0.2);
+        border-radius: 12px;
+        overflow: hidden;
+        background: rgba(16, 16, 28, 0.45);
+      }
+      th,
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(181, 155, 255, 0.1);
+        text-align: left;
+        font-size: 14px;
+      }
+      th {
+        color: var(--purple-2);
+        font-weight: 700;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .buy {
+        color: #7dffb3;
+        font-weight: 700;
+      }
+      .sell {
+        color: #ff8a9d;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <h1>Trade History</h1>
+        <a class="home-link" href="{% url 'home' %}">Back to Trading</a>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>As of</th>
+            <th>Side</th>
+            <th>Symbol</th>
+            <th>Qty</th>
+            <th>Price/share</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in trades %}
+          <tr>
+            <td>{{ t.created_at }}</td>
+            <td class="muted">{% if t.executed_as_of %}{{ t.executed_as_of }}{% else %}-{% endif %}</td>
+            <td class="{% if t.side == 'BUY' %}buy{% else %}sell{% endif %}">{{ t.side }}</td>
+            <td>{{ t.symbol }}</td>
+            <td>{{ t.quantity }}</td>
+            <td>{{ t.price_per_share_stardust|floatformat:2 }}</td>
+            <td>{{ t.total_stardust|floatformat:2 }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="muted">No trades yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>
