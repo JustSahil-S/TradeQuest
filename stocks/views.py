@@ -16,7 +16,15 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Position, Profile, Trade, PowerUp, UserPowerUp, StardustShield
+from .models import (
+    Position,
+    Profile,
+    Trade,
+    PowerUp,
+    UserPowerUp,
+    StardustShield,
+    MultiplyProfitBoost,
+)
 from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols, fetch_sector
 
 # Smallest stardust unit (8 decimal places) for exact arithmetic.
@@ -119,6 +127,8 @@ def _run_shields_for_user(user, as_of: date | None = None) -> None:
     Disabled while using admin time travel (as_of) to avoid mutating portfolio in simulations.
     """
     if as_of is not None:
+        # Mutation-based triggers are disabled during admin time-travel simulation.
+        # Portfolio endpoints can simulate shield effects without writing to DB.
         return
 
     active_shields = StardustShield.objects.filter(user=user, is_active=True).order_by("id")
@@ -175,6 +185,23 @@ def _run_shields_for_user(user, as_of: date | None = None) -> None:
             shield_locked.save(update_fields=["is_active", "triggered_at"])
 
 
+def _get_simulated_shield_triggered_symbols(user, as_of: date) -> set[str]:
+    """
+    Compute which shield-protected symbols would be auto-sold at this simulated date.
+    This is read-only (no DB mutations).
+    """
+    triggered: set[str] = set()
+    active_shields = StardustShield.objects.filter(user=user, is_active=True)
+    for shield in active_shields:
+        try:
+            current_price = _dust_from_float(fetch_latest_price(shield.symbol, as_of=as_of))
+        except Exception:
+            continue
+        if current_price <= shield.trigger_price_stardust:
+            triggered.add(shield.symbol)
+    return triggered
+
+
 @login_required
 def home(request):
     return render(request, "stocks/index.html")
@@ -192,6 +219,14 @@ def inventory(request):
     except (PowerUp.DoesNotExist, UserPowerUp.DoesNotExist):
         shield_qty = 0
 
+    # Multiply profit boost quantity in inventory.
+    try:
+        multiply_powerup = PowerUp.objects.get(code="MULTIPLY_PROFIT_2X")
+        multiply_item = UserPowerUp.objects.get(user=request.user, powerup=multiply_powerup)
+        multiply_qty = int(multiply_item.quantity or 0)
+    except (PowerUp.DoesNotExist, UserPowerUp.DoesNotExist):
+        multiply_qty = 0
+
     positions = []
     for p in positions_qs:
         try:
@@ -208,11 +243,72 @@ def inventory(request):
         )
 
     active_shields = StardustShield.objects.filter(user=request.user, is_active=True).order_by("symbol")
+    active_multipliers = MultiplyProfitBoost.objects.filter(
+        user=request.user, is_active=True
+    ).order_by("symbol")
     return render(
         request,
         "stocks/inventory.html",
-        {"shield_qty": shield_qty, "positions": positions, "active_shields": active_shields},
+        {
+            "shield_qty": shield_qty,
+            "multiply_qty": multiply_qty,
+            "positions": positions,
+            "active_shields": active_shields,
+            "active_multipliers": active_multipliers,
+        },
     )
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def apply_multiply_profit_boost(request):
+    """
+    Apply a 2x profit multiplier power-up to a held symbol.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    symbol = (payload.get("symbol") or "").upper().strip()
+    if not symbol:
+        return JsonResponse({"error": "Symbol is required"}, status=400)
+
+    try:
+        Position.objects.get(user=request.user, symbol=symbol, quantity__gt=0)
+    except Position.DoesNotExist:
+        return JsonResponse({"error": f"You do not currently own {symbol}."}, status=400)
+
+    if MultiplyProfitBoost.objects.filter(user=request.user, symbol=symbol, is_active=True).exists():
+        return JsonResponse({"error": f"A multiplier is already active for {symbol}."}, status=400)
+
+    try:
+        multiply_powerup = PowerUp.objects.get(code="MULTIPLY_PROFIT_2X")
+    except PowerUp.DoesNotExist:
+        return JsonResponse({"error": "Multiply power-up is not configured yet."}, status=500)
+
+    try:
+        inventory_item = UserPowerUp.objects.select_for_update().get(
+            user=request.user, powerup=multiply_powerup
+        )
+    except UserPowerUp.DoesNotExist:
+        return JsonResponse({"error": "You do not have any Multiply power-ups in inventory."}, status=400)
+
+    if inventory_item.quantity <= 0:
+        return JsonResponse({"error": "You do not have any Multiply power-ups left."}, status=400)
+
+    inventory_item.quantity -= 1
+    inventory_item.save(update_fields=["quantity"])
+
+    MultiplyProfitBoost.objects.create(
+        user=request.user,
+        symbol=symbol,
+        multiplier=Decimal("2.00"),
+        is_active=True,
+    )
+
+    return JsonResponse({"ok": True, "symbol": symbol, "remaining_boosts": inventory_item.quantity})
 
 
 @login_required
@@ -418,12 +514,18 @@ def symbol_search(request):
 @login_required
 def portfolio(request):
     as_of = _effective_as_of(request)
-    _run_shields_for_user(request.user, as_of=as_of)
+    triggered_symbols: set[str] = set()
+    if as_of is None:
+        _run_shields_for_user(request.user, as_of=None)
+    else:
+        triggered_symbols = _get_simulated_shield_triggered_symbols(request.user, as_of=as_of)
     positions = Position.objects.filter(user=request.user).order_by("symbol")
     items = []
     total_value = Decimal("0")
 
     for p in positions:
+        if p.symbol in triggered_symbols:
+            continue
         try:
             latest = fetch_latest_price(p.symbol, as_of=as_of)
             current_price = _dust_from_float(latest)
@@ -462,13 +564,19 @@ def sector_breakdown(request):
     Return portfolio sector allocation (by current position value).
     """
     as_of = _effective_as_of(request)
-    _run_shields_for_user(request.user, as_of=as_of)
+    triggered_symbols: set[str] = set()
+    if as_of is None:
+        _run_shields_for_user(request.user, as_of=None)
+    else:
+        triggered_symbols = _get_simulated_shield_triggered_symbols(request.user, as_of=as_of)
     positions = Position.objects.filter(user=request.user).order_by("symbol")
 
     totals: dict[str, Decimal] = {}
     grand_total = Decimal("0")
 
     for p in positions:
+        if p.symbol in triggered_symbols:
+            continue
         if p.quantity <= 0:
             continue
         try:
@@ -666,7 +774,31 @@ def sell_stock(request):
         position.save(update_fields=["quantity", "last_reset_value_stardust"])
 
     profile = Profile.objects.select_for_update().get(user=request.user)
-    profile.stardust_balance = (profile.stardust_balance + proceeds).quantize(
+    credited = proceeds
+
+    # If a multiplier is active, boost only positive profit.
+    boost = MultiplyProfitBoost.objects.filter(
+        user=request.user, symbol=symbol, is_active=True
+    ).first()
+    bonus = Decimal("0")
+    multiplier = None
+    if boost:
+        cost_basis = (position.average_cost_stardust * qty_dec).quantize(
+            DUST_Q, rounding=ROUND_HALF_UP
+        )
+        profit = (proceeds - cost_basis).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        multiplier = boost.multiplier
+        if profit > 0 and multiplier is not None:
+            bonus = (profit * (multiplier - Decimal("1"))).quantize(
+                DUST_Q, rounding=ROUND_HALF_UP
+            )
+            credited = (credited + bonus).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+
+        boost.is_active = False
+        boost.consumed_at = timezone.now()
+        boost.save(update_fields=["is_active", "consumed_at"])
+
+    profile.stardust_balance = (profile.stardust_balance + credited).quantize(
         DUST_Q, rounding=ROUND_HALF_UP
     )
     profile.save(update_fields=["stardust_balance"])
@@ -678,7 +810,7 @@ def sell_stock(request):
         side=Trade.Side.SELL,
         quantity=quantity,
         price_per_share_stardust=price_per_share,
-        total_stardust=proceeds,
+        total_stardust=credited,
     )
 
     return JsonResponse(
@@ -687,7 +819,9 @@ def sell_stock(request):
             "symbol": symbol,
             "quantity_sold": quantity,
             "price_per_share": _dust_str(price_per_share),
-            "total_proceeds": _dust_str(proceeds),
+            "total_proceeds": _dust_str(credited),
+            "profit_multiplier_applied": bool(boost),
+            "profit_bonus_stardust": _dust_str(bonus),
             "owned_quantity": remaining_qty,
             "remaining_stardust": _dust_str(profile.stardust_balance),
         }

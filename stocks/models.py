@@ -164,3 +164,38 @@ class StardustShield(models.Model):
             f"Shield(user={self.user.username}, symbol={self.symbol}, "
             f"trigger={self.trigger_price_stardust}, active={self.is_active})"
         )
+
+
+class MultiplyProfitBoost(models.Model):
+    """
+    Active boost: next sell of `symbol` gets a 2x multiplier on realized profit.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profit_multiplier_boosts",
+    )
+    symbol = models.CharField(max_length=12)
+
+    # Fixed to 2x for now, but stored as Decimal for flexibility.
+    multiplier = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("2.00"))
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "symbol"],
+                condition=models.Q(is_active=True),
+                name="unique_active_profit_multiplier_per_symbol",
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f"MultiplyBoost(user={self.user.username}, symbol={self.symbol}, "
+            f"mult={self.multiplier}, active={self.is_active})"
+        )

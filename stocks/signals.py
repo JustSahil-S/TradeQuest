@@ -23,3 +23,15 @@ def ensure_profile_exists(sender, instance, created, **kwargs):
         )
         UserPowerUp.objects.get_or_create(user=instance, powerup=shield_powerup, defaults={"quantity": 1})
 
+        # Starting power-up for profit multipliers.
+        multiply_powerup, _ = PowerUp.objects.get_or_create(
+            code="MULTIPLY_PROFIT_2X",
+            defaults={
+                "name": "Multiply Profit (2x)",
+                "description": "When you sell a boosted stock, positive profit is doubled.",
+            },
+        )
+        UserPowerUp.objects.get_or_create(
+            user=instance, powerup=multiply_powerup, defaults={"quantity": 1}
+        )
+

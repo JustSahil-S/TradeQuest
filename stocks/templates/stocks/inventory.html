@@ -184,7 +184,7 @@
           id="shieldPowerUpBtn"
           class="shield-item-btn"
           type="button"
-          {% if shield_qty|default:0|int <= 0 %}disabled{% endif %}
+          {% if shield_qty|default:0 <= 0 %}disabled{% endif %}
         >
           <div class="shield-left">
             <div class="shield-icon" aria-hidden="true">
@@ -226,6 +226,59 @@
       </div>
 
       <div class="panel">
+        <h2>Multiply Profit (2x)</h2>
+        <button
+          id="multiplyPowerUpBtn"
+          class="shield-item-btn"
+          type="button"
+          {% if multiply_qty|default:0 <= 0 %}disabled{% endif %}
+        >
+          <div class="shield-left">
+            <div class="shield-icon" aria-hidden="true">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" />
+                <path d="M20 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" />
+              </svg>
+            </div>
+            <div>
+              Multiply Profit
+              <div class="shield-sub">2x positive profit on sell</div>
+            </div>
+          </div>
+          <div>Qty: {{ multiply_qty|default:0 }}</div>
+        </button>
+      </div>
+
+      <div class="panel hidden-panel" id="multiplyConfigPanel">
+        <h2>Configure Multiplier</h2>
+        <p class="muted">
+          Select a stock you own. The next time you sell it, positive profit will be doubled (2x).
+        </p>
+        <div class="row">
+          <select id="multiplySymbol">
+            {% for p in positions %}
+            <option value="{{ p.symbol }}" data-current="{{ p.current_price_stardust|floatformat:2 }}">
+              {{ p.symbol }} (owned: {{ p.quantity }}, current: {{ p.current_price_stardust|floatformat:2 }})
+            </option>
+            {% empty %}
+            <option value="">No holdings</option>
+            {% endfor %}
+          </select>
+          <button id="applyMultiplyBtn" class="btn" type="button">Apply Multiplier</button>
+        </div>
+        <div id="multiplyMsg" class="msg"></div>
+      </div>
+
+      <div class="panel">
         <h2>Active Shields</h2>
         {% if active_shields %}
         <div class="cards">
@@ -244,19 +297,60 @@
         <p class="muted">No active shields.</p>
         {% endif %}
       </div>
+
+      <div class="panel">
+        <h2>Active Multipliers</h2>
+        {% if active_multipliers %}
+        <div class="cards">
+          {% for m in active_multipliers %}
+          <div class="card">
+            <div class="name">{{ m.symbol }}</div>
+            <div class="desc">2x multiplier active</div>
+            <div class="meta">
+              <div>Active: Yes</div>
+              <div class="muted">Created: {{ m.created_at }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted">No active multipliers.</p>
+        {% endif %}
+      </div>
     </div>
 
     <script>
       (function () {
-        const powerBtn = document.getElementById("shieldPowerUpBtn");
-        const configPanel = document.getElementById("shieldConfigPanel");
-        const symbolEl = document.getElementById("shieldSymbol");
+        const shieldPowerBtn = document.getElementById("shieldPowerUpBtn");
+        const shieldConfigPanel = document.getElementById("shieldConfigPanel");
+        const shieldSymbolEl = document.getElementById("shieldSymbol");
         const triggerEl = document.getElementById("shieldTrigger");
-        const applyBtn = document.getElementById("applyShieldBtn");
-        const msgEl = document.getElementById("shieldMsg");
-        if (!powerBtn || !configPanel || !symbolEl || !triggerEl || !applyBtn || !msgEl) return;
+        const applyShieldBtn = document.getElementById("applyShieldBtn");
+        const shieldMsgEl = document.getElementById("shieldMsg");
+
+        const multiplyPowerBtn = document.getElementById("multiplyPowerUpBtn");
+        const multiplyConfigPanel = document.getElementById("multiplyConfigPanel");
+        const multiplySymbolEl = document.getElementById("multiplySymbol");
+        const applyMultiplyBtn = document.getElementById("applyMultiplyBtn");
+        const multiplyMsgEl = document.getElementById("multiplyMsg");
+
+        if (
+          !shieldPowerBtn ||
+          !shieldConfigPanel ||
+          !shieldSymbolEl ||
+          !triggerEl ||
+          !applyShieldBtn ||
+          !shieldMsgEl ||
+          !multiplyPowerBtn ||
+          !multiplyConfigPanel ||
+          !multiplySymbolEl ||
+          !applyMultiplyBtn ||
+          !multiplyMsgEl
+        )
+          return;
 
         const initialShieldQty = {{ shield_qty|default:0 }};
+        const initialMultiplyQty = {{ multiply_qty|default:0 }};
 
         function getCookie(name) {
           const v = `; ${document.cookie}`;
@@ -266,14 +360,25 @@
         }
 
         function setMsg(text, isError) {
-          msgEl.textContent = text || "";
-          msgEl.classList.toggle("error", Boolean(isError));
+          // placeholder; use the specific setters below
+          shieldMsgEl.textContent = text || "";
+          shieldMsgEl.classList.toggle("error", Boolean(isError));
+        }
+
+        function setShieldMsg(text, isError) {
+          shieldMsgEl.textContent = text || "";
+          shieldMsgEl.classList.toggle("error", Boolean(isError));
+        }
+
+        function setMultiplyMsg(text, isError) {
+          multiplyMsgEl.textContent = text || "";
+          multiplyMsgEl.classList.toggle("error", Boolean(isError));
         }
 
         let lastSuggestedTrigger = "";
 
         function suggestTriggerFromCurrentPrice() {
-          const opt = symbolEl.options[symbolEl.selectedIndex];
+          const opt = shieldSymbolEl.options[shieldSymbolEl.selectedIndex];
           const cur = opt?.dataset?.current;
           if (!cur) return;
 
@@ -283,37 +388,38 @@
           }
         }
 
-        symbolEl.addEventListener("change", function () {
-          if (configPanel.classList.contains("hidden-panel")) return;
+        shieldSymbolEl.addEventListener("change", function () {
+          if (shieldConfigPanel.classList.contains("hidden-panel")) return;
           suggestTriggerFromCurrentPrice();
         });
 
-        powerBtn.addEventListener("click", function () {
+        shieldPowerBtn.addEventListener("click", function () {
           if (initialShieldQty <= 0) {
-            setMsg("You don't have any Stardust Shields.", true);
+            setShieldMsg("You don't have any Stardust Shields.", true);
             return;
           }
-          configPanel.classList.toggle("hidden-panel");
-          setMsg("", false);
+          multiplyConfigPanel.classList.add("hidden-panel");
+          shieldConfigPanel.classList.toggle("hidden-panel");
+          setShieldMsg("", false);
           window.setTimeout(function () {
             suggestTriggerFromCurrentPrice();
           }, 0);
         });
 
-        applyBtn.addEventListener("click", async function () {
-          const symbol = (symbolEl.value || "").trim().toUpperCase();
+        applyShieldBtn.addEventListener("click", async function () {
+          const symbol = (shieldSymbolEl.value || "").trim().toUpperCase();
           const trigger = Number(triggerEl.value || 0);
           if (!symbol) {
-            setMsg("Select a stock you own.", true);
+            setShieldMsg("Select a stock you own.", true);
             return;
           }
           if (!(trigger > 0)) {
-            setMsg("Enter a valid trigger price.", true);
+            setShieldMsg("Enter a valid trigger price.", true);
             return;
           }
 
-          applyBtn.disabled = true;
-          setMsg("", false);
+          applyShieldBtn.disabled = true;
+          setShieldMsg("", false);
           try {
             const res = await fetch("{% url 'apply_stardust_shield' %}", {
               method: "POST",
@@ -329,15 +435,56 @@
             });
             const payload = await res.json();
             if (!res.ok) throw new Error(payload?.error || "Failed to apply shield");
-            setMsg(
+            setShieldMsg(
               `Shield applied to ${payload.symbol} at ${Number(payload.trigger_price_stardust).toFixed(2)}.`,
               false
             );
             window.setTimeout(() => window.location.reload(), 600);
           } catch (e) {
-            setMsg(e?.message || "Failed to apply shield", true);
+            setShieldMsg(e?.message || "Failed to apply shield", true);
           } finally {
-            applyBtn.disabled = false;
+            applyShieldBtn.disabled = false;
+          }
+        });
+
+        multiplyPowerBtn.addEventListener("click", function () {
+          if (initialMultiplyQty <= 0) {
+            setMultiplyMsg("You don't have any Multiply power-ups.", true);
+            return;
+          }
+          shieldConfigPanel.classList.add("hidden-panel");
+          multiplyConfigPanel.classList.toggle("hidden-panel");
+          setMultiplyMsg("", false);
+        });
+
+        applyMultiplyBtn.addEventListener("click", async function () {
+          const symbol = (multiplySymbolEl.value || "").trim().toUpperCase();
+          if (!symbol) {
+            setMultiplyMsg("Select a stock you own.", true);
+            return;
+          }
+          applyMultiplyBtn.disabled = true;
+          setMultiplyMsg("", false);
+
+          try {
+            const res = await fetch("{% url 'apply_multiply_profit_boost' %}", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+                Accept: "application/json",
+              },
+              body: JSON.stringify({ symbol }),
+            });
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.error || "Failed to apply multiplier");
+
+            setMultiplyMsg(`Multiplier applied to ${payload.symbol}.`, false);
+            window.setTimeout(() => window.location.reload(), 600);
+          } catch (e) {
+            setMultiplyMsg(e?.message || "Failed to apply multiplier", true);
+          } finally {
+            applyMultiplyBtn.disabled = false;
           }
         });
       })();

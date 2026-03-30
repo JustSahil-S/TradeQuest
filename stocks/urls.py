@@ -15,6 +15,11 @@ urlpatterns = [
     path("api/buy-stock/", views.buy_stock, name="buy_stock"),
     path("api/sell-stock/", views.sell_stock, name="sell_stock"),
     path("api/apply-stardust-shield/", views.apply_stardust_shield, name="apply_stardust_shield"),
+    path(
+        "api/apply-multiply-profit-boost/",
+        views.apply_multiply_profit_boost,
+        name="apply_multiply_profit_boost",
+    ),
     path("api/advisor-chat/", views.advisor_chat, name="advisor_chat"),
 ]
 
