@@ -15,7 +15,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .models import Position, Profile, Trade
+from .models import Position, Profile, Trade, PowerUp, UserPowerUp
 from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols, fetch_sector
 
 # Smallest stardust unit (8 decimal places) for exact arithmetic.
@@ -115,6 +115,16 @@ def _pct_growth(current: Decimal, baseline: Decimal) -> Decimal:
 @login_required
 def home(request):
     return render(request, "stocks/index.html")
+
+
+@login_required
+def inventory(request):
+    items = (
+        UserPowerUp.objects.filter(user=request.user, quantity__gt=0)
+        .select_related("powerup")
+        .order_by("-acquired_at")
+    )
+    return render(request, "stocks/inventory.html", {"items": items})
 
 
 @login_required

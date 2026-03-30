@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
+from django.db.models import F
 
 
 class Profile(models.Model):
@@ -81,3 +82,54 @@ class Trade(models.Model):
 
     def __str__(self):
         return f"Trade(user={self.user.username}, {self.side} {self.quantity} {self.symbol})"
+
+
+class PowerUp(models.Model):
+    """
+    Defines a power-up that can be granted to users (future gamification hook).
+    """
+
+    code = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class UserPowerUp(models.Model):
+    """
+    Per-user inventory: how many of each PowerUp the user owns.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="user_powerups",
+    )
+    powerup = models.ForeignKey(
+        PowerUp,
+        on_delete=models.CASCADE,
+        related_name="inventory_items",
+    )
+    quantity = models.PositiveIntegerField(default=0)
+    acquired_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "powerup"], name="unique_user_powerup")
+        ]
+
+    def __str__(self):
+        return f"{self.user.username}: {self.powerup.code} x{self.quantity}"
+
+    @classmethod
+    def grant(cls, user, powerup: PowerUp, quantity: int = 1) -> "UserPowerUp":
+        """
+        Grant/increment a powerup for a user.
+        """
+        item, _created = cls.objects.get_or_create(user=user, powerup=powerup, defaults={"quantity": 0})
+        item.quantity = (item.quantity or 0) + int(quantity)
+        item.save(update_fields=["quantity"])
+        return item
