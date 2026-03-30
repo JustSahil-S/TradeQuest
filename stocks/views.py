@@ -13,9 +13,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Position, Profile, Trade, PowerUp, UserPowerUp
+from .models import Position, Profile, Trade, PowerUp, UserPowerUp, StardustShield
 from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols, fetch_sector
 
 # Smallest stardust unit (8 decimal places) for exact arithmetic.
@@ -112,6 +113,68 @@ def _pct_growth(current: Decimal, baseline: Decimal) -> Decimal:
     )
 
 
+def _run_shields_for_user(user, as_of: date | None = None) -> None:
+    """
+    Trigger and execute stardust shields when current price <= trigger threshold.
+    Disabled while using admin time travel (as_of) to avoid mutating portfolio in simulations.
+    """
+    if as_of is not None:
+        return
+
+    active_shields = StardustShield.objects.filter(user=user, is_active=True).order_by("id")
+    for shield in active_shields:
+        symbol = shield.symbol
+        try:
+            current_price = _dust_from_float(fetch_latest_price(symbol))
+        except Exception:
+            continue
+
+        if current_price > shield.trigger_price_stardust:
+            continue
+
+        with transaction.atomic():
+            shield_locked = StardustShield.objects.select_for_update().get(pk=shield.pk)
+            if not shield_locked.is_active:
+                continue
+            try:
+                position = Position.objects.select_for_update().get(user=user, symbol=symbol)
+            except Position.DoesNotExist:
+                shield_locked.is_active = False
+                shield_locked.triggered_at = timezone.now()
+                shield_locked.save(update_fields=["is_active", "triggered_at"])
+                continue
+
+            qty = position.quantity
+            if qty <= 0:
+                shield_locked.is_active = False
+                shield_locked.triggered_at = timezone.now()
+                shield_locked.save(update_fields=["is_active", "triggered_at"])
+                continue
+
+            proceeds = (current_price * Decimal(qty)).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+            position.delete()
+
+            profile = Profile.objects.select_for_update().get(user=user)
+            profile.stardust_balance = (profile.stardust_balance + proceeds).quantize(
+                DUST_Q, rounding=ROUND_HALF_UP
+            )
+            profile.save(update_fields=["stardust_balance"])
+
+            Trade.objects.create(
+                user=user,
+                executed_as_of=None,
+                symbol=symbol,
+                side=Trade.Side.SELL,
+                quantity=qty,
+                price_per_share_stardust=current_price,
+                total_stardust=proceeds,
+            )
+
+            shield_locked.is_active = False
+            shield_locked.triggered_at = timezone.now()
+            shield_locked.save(update_fields=["is_active", "triggered_at"])
+
+
 @login_required
 def home(request):
     return render(request, "stocks/index.html")
@@ -119,12 +182,102 @@ def home(request):
 
 @login_required
 def inventory(request):
-    items = (
-        UserPowerUp.objects.filter(user=request.user, quantity__gt=0)
-        .select_related("powerup")
-        .order_by("-acquired_at")
+    positions_qs = Position.objects.filter(user=request.user, quantity__gt=0).order_by("symbol")
+
+    # Stardust Shield quantity in inventory.
+    try:
+        shield_powerup = PowerUp.objects.get(code="STARDUST_SHIELD")
+        shield_item = UserPowerUp.objects.get(user=request.user, powerup=shield_powerup)
+        shield_qty = int(shield_item.quantity or 0)
+    except (PowerUp.DoesNotExist, UserPowerUp.DoesNotExist):
+        shield_qty = 0
+
+    positions = []
+    for p in positions_qs:
+        try:
+            px = fetch_latest_price(p.symbol)
+            current_price = _dust_from_float(px)
+        except Exception:
+            current_price = Decimal("0")
+        positions.append(
+            {
+                "symbol": p.symbol,
+                "quantity": p.quantity,
+                "current_price_stardust": current_price,
+            }
+        )
+
+    active_shields = StardustShield.objects.filter(user=request.user, is_active=True).order_by("symbol")
+    return render(
+        request,
+        "stocks/inventory.html",
+        {"shield_qty": shield_qty, "positions": positions, "active_shields": active_shields},
     )
-    return render(request, "stocks/inventory.html", {"items": items})
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def apply_stardust_shield(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    symbol = (payload.get("symbol") or "").upper().strip()
+    trigger_raw = payload.get("trigger_price")
+    if not symbol:
+        return JsonResponse({"error": "Symbol is required"}, status=400)
+
+    try:
+        trigger_price = _dust_from_float(float(trigger_raw))
+    except Exception:
+        return JsonResponse({"error": "Trigger price must be a valid number"}, status=400)
+
+    if trigger_price <= 0:
+        return JsonResponse({"error": "Trigger price must be greater than 0"}, status=400)
+
+    try:
+        Position.objects.get(user=request.user, symbol=symbol, quantity__gt=0)
+    except Position.DoesNotExist:
+        return JsonResponse({"error": f"You do not currently own {symbol}."}, status=400)
+
+    if StardustShield.objects.filter(user=request.user, symbol=symbol, is_active=True).exists():
+        return JsonResponse({"error": f"A shield is already active for {symbol}."}, status=400)
+
+    try:
+        shield_powerup = PowerUp.objects.get(code="STARDUST_SHIELD")
+    except PowerUp.DoesNotExist:
+        return JsonResponse({"error": "Stardust Shield power-up is not configured yet."}, status=500)
+
+    try:
+        inventory_item = UserPowerUp.objects.select_for_update().get(
+            user=request.user, powerup=shield_powerup
+        )
+    except UserPowerUp.DoesNotExist:
+        return JsonResponse({"error": "You do not have any Stardust Shields in inventory."}, status=400)
+
+    if inventory_item.quantity <= 0:
+        return JsonResponse({"error": "You do not have any Stardust Shields left."}, status=400)
+
+    inventory_item.quantity -= 1
+    inventory_item.save(update_fields=["quantity"])
+
+    shield = StardustShield.objects.create(
+        user=request.user,
+        symbol=symbol,
+        trigger_price_stardust=trigger_price,
+        is_active=True,
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "symbol": symbol,
+            "trigger_price_stardust": _dust_str(shield.trigger_price_stardust),
+            "remaining_shields": inventory_item.quantity,
+        }
+    )
 
 
 @login_required
@@ -265,6 +418,7 @@ def symbol_search(request):
 @login_required
 def portfolio(request):
     as_of = _effective_as_of(request)
+    _run_shields_for_user(request.user, as_of=as_of)
     positions = Position.objects.filter(user=request.user).order_by("symbol")
     items = []
     total_value = Decimal("0")
@@ -308,6 +462,7 @@ def sector_breakdown(request):
     Return portfolio sector allocation (by current position value).
     """
     as_of = _effective_as_of(request)
+    _run_shields_for_user(request.user, as_of=as_of)
     positions = Position.objects.filter(user=request.user).order_by("symbol")
 
     totals: dict[str, Decimal] = {}
@@ -351,6 +506,7 @@ def buy_stock(request):
     except Exception:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
     as_of = _parse_as_of_date(payload.get("as_of")) if request.user.is_superuser else None
+    _run_shields_for_user(request.user, as_of=as_of)
 
     symbol = (payload.get("symbol") or "").upper().strip()
     quantity_raw = payload.get("quantity")
@@ -456,6 +612,7 @@ def sell_stock(request):
     except Exception:
         return JsonResponse({"error": "Invalid JSON payload"}, status=400)
     as_of = _parse_as_of_date(payload.get("as_of")) if request.user.is_superuser else None
+    _run_shields_for_user(request.user, as_of=as_of)
 
     symbol = (payload.get("symbol") or "").upper().strip()
     quantity_raw = payload.get("quantity")
@@ -497,6 +654,10 @@ def sell_stock(request):
     remaining_qty = position.quantity - quantity
     if remaining_qty == 0:
         position.delete()
+        StardustShield.objects.filter(user=request.user, symbol=symbol, is_active=True).update(
+            is_active=False,
+            triggered_at=timezone.now(),
+        )
     else:
         position.quantity = remaining_qty
         position.last_reset_value_stardust = (

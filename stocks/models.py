@@ -2,7 +2,6 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
-from django.db.models import F
 
 
 class Profile(models.Model):
@@ -133,3 +132,35 @@ class UserPowerUp(models.Model):
         item.quantity = (item.quantity or 0) + int(quantity)
         item.save(update_fields=["quantity"])
         return item
+
+
+class StardustShield(models.Model):
+    """
+    Active stop-loss style shield: auto-sell a symbol when it drops below threshold.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="stardust_shields",
+    )
+    symbol = models.CharField(max_length=12)
+    trigger_price_stardust = models.DecimalField(max_digits=24, decimal_places=8)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    triggered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "symbol"],
+                condition=models.Q(is_active=True),
+                name="unique_active_shield_per_symbol",
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f"Shield(user={self.user.username}, symbol={self.symbol}, "
+            f"trigger={self.trigger_price_stardust}, active={self.is_active})"
+        )
