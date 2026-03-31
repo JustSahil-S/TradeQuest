@@ -199,3 +199,21 @@ class MultiplyProfitBoost(models.Model):
             f"MultiplyBoost(user={self.user.username}, symbol={self.symbol}, "
             f"mult={self.multiplier}, active={self.is_active})"
         )
+
+
+class ReconSnapshot(models.Model):
+    """
+    Last intel snapshot from using a Recon power-up (top players' holdings at capture time).
+    Replaced each time the user deploys another Recon.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="recon_snapshot",
+    )
+    captured_at = models.DateTimeField()
+    players = models.JSONField(default=list)
+
+    def __str__(self):
+        return f"ReconSnapshot(user={self.user.username}, at={self.captured_at})"

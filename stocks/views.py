@@ -24,8 +24,9 @@ from .models import (
     UserPowerUp,
     StardustShield,
     MultiplyProfitBoost,
+    ReconSnapshot,
 )
-from .yahoo_data import fetch_candles, fetch_latest_price, search_symbols, fetch_sector
+from .yahoo_data import fetch_candles, fetch_latest_price, fetch_news, search_symbols, fetch_sector
 
 # Smallest stardust unit (8 decimal places) for exact arithmetic.
 DUST_Q = Decimal("0.00000001")
@@ -119,6 +120,82 @@ def _pct_growth(current: Decimal, baseline: Decimal) -> Decimal:
     return ((current - baseline) / baseline * Decimal("100")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
+
+
+def _leaderboard_networth_rows(as_of: date | None = None) -> list[dict]:
+    """
+    All users ranked by net worth (cash + position value at latest or simulated close).
+    """
+    rows: list[dict] = []
+    profiles = Profile.objects.select_related("user").all()
+    for profile in profiles:
+        user = profile.user
+        cash = profile.stardust_balance
+        positions = Position.objects.filter(user=user)
+        assets_now = Decimal("0")
+        for p in positions:
+            qty = Decimal(p.quantity)
+            if qty <= 0:
+                continue
+            try:
+                px_now = _dust_from_float(fetch_latest_price(p.symbol, as_of=as_of))
+            except Exception:
+                px_now = Decimal("0")
+            assets_now += (qty * px_now).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        networth_now = (cash + assets_now).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        rows.append(
+            {
+                "user_id": user.id,
+                "username": user.username,
+                "networth": networth_now,
+            }
+        )
+    rows.sort(key=lambda r: r["networth"], reverse=True)
+    return rows
+
+
+def _holdings_for_user_id(user_id: int, as_of: date | None = None) -> list[dict]:
+    out: list[dict] = []
+    for p in Position.objects.filter(user_id=user_id, quantity__gt=0).order_by("symbol"):
+        try:
+            px = _dust_from_float(fetch_latest_price(p.symbol, as_of=as_of))
+        except Exception:
+            px = Decimal("0")
+        val = (Decimal(p.quantity) * px).quantize(DUST_Q, rounding=ROUND_HALF_UP)
+        out.append(
+            {
+                "symbol": p.symbol,
+                "quantity": p.quantity,
+                "current_price_stardust": _dust_str(px),
+                "value_stardust": _dust_str(val),
+            }
+        )
+    return out
+
+
+def _build_recon_intel_payload(as_of: date | None = None) -> dict:
+    ranked = _leaderboard_networth_rows(as_of=as_of)
+    top = ranked[:3]
+    players: list[dict] = []
+    for i, row in enumerate(top, start=1):
+        players.append(
+            {
+                "rank": i,
+                "username": row["username"],
+                "networth_stardust": _dust_str(row["networth"]),
+                "holdings": _holdings_for_user_id(row["user_id"], as_of=as_of),
+            }
+        )
+    return {"players": players}
+
+
+def _recon_qty_for_user(user) -> int:
+    try:
+        recon_pu = PowerUp.objects.get(code="RECON")
+        item = UserPowerUp.objects.get(user=user, powerup=recon_pu)
+        return int(item.quantity or 0)
+    except (PowerUp.DoesNotExist, UserPowerUp.DoesNotExist):
+        return 0
 
 
 def _run_shields_for_user(user, as_of: date | None = None) -> None:
@@ -227,6 +304,13 @@ def inventory(request):
     except (PowerUp.DoesNotExist, UserPowerUp.DoesNotExist):
         multiply_qty = 0
 
+    recon_qty = _recon_qty_for_user(request.user)
+    recon_snapshot = None
+    try:
+        recon_snapshot = ReconSnapshot.objects.get(user=request.user)
+    except ReconSnapshot.DoesNotExist:
+        pass
+
     positions = []
     for p in positions_qs:
         try:
@@ -252,6 +336,8 @@ def inventory(request):
         {
             "shield_qty": shield_qty,
             "multiply_qty": multiply_qty,
+            "recon_qty": recon_qty,
+            "recon_snapshot": recon_snapshot,
             "positions": positions,
             "active_shields": active_shields,
             "active_multipliers": active_multipliers,
@@ -372,6 +458,62 @@ def apply_stardust_shield(request):
             "symbol": symbol,
             "trigger_price_stardust": _dust_str(shield.trigger_price_stardust),
             "remaining_shields": inventory_item.quantity,
+        }
+    )
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def use_recon(request):
+    """
+    Consume one Recon power-up and refresh the stored snapshot of top-3 players' holdings.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        payload = {}
+
+    as_of = None
+    if request.user.is_superuser:
+        as_of = _parse_as_of_date(payload.get("as_of"))
+
+    try:
+        recon_pu = PowerUp.objects.get(code="RECON")
+    except PowerUp.DoesNotExist:
+        return JsonResponse({"error": "Recon power-up is not configured yet."}, status=500)
+
+    try:
+        inventory_item = UserPowerUp.objects.select_for_update().get(
+            user=request.user, powerup=recon_pu
+        )
+    except UserPowerUp.DoesNotExist:
+        return JsonResponse({"error": "You do not have any Recon power-ups in inventory."}, status=400)
+
+    if inventory_item.quantity <= 0:
+        return JsonResponse({"error": "You do not have any Recon power-ups left."}, status=400)
+
+    inventory_item.quantity -= 1
+    inventory_item.save(update_fields=["quantity"])
+
+    intel = _build_recon_intel_payload(as_of=as_of)
+    now = timezone.now()
+    ReconSnapshot.objects.update_or_create(
+        user=request.user,
+        defaults={
+            "players": intel["players"],
+            "captured_at": now,
+        },
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "remaining_recon": inventory_item.quantity,
+            "recon_intel": {
+                "captured_at": now.isoformat(),
+                "players": intel["players"],
+            },
         }
     )
 
@@ -503,6 +645,26 @@ def stock_chart(request):
 
 
 @login_required
+def stock_news(request):
+    """
+    Yahoo Finance headlines for the selected symbol (yfinance Ticker.news).
+    """
+    symbol = (request.GET.get("symbol") or "SPY").upper().strip()
+    limit_raw = request.GET.get("limit") or "8"
+    try:
+        limit = int(limit_raw)
+    except ValueError:
+        return JsonResponse({"error": "Invalid limit value"}, status=400)
+
+    try:
+        articles = fetch_news(symbol=symbol, limit=limit)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"symbol": symbol, "articles": articles})
+
+
+@login_required
 def symbol_search(request):
     query = request.GET.get("q", "")
     try:
@@ -522,6 +684,17 @@ def portfolio(request):
     positions = Position.objects.filter(user=request.user).order_by("symbol")
     items = []
     total_value = Decimal("0")
+
+    shield_symbols = set(
+        StardustShield.objects.filter(user=request.user, is_active=True).values_list(
+            "symbol", flat=True
+        )
+    )
+    multiply_symbols = set(
+        MultiplyProfitBoost.objects.filter(user=request.user, is_active=True).values_list(
+            "symbol", flat=True
+        )
+    )
 
     for p in positions:
         if p.symbol in triggered_symbols:
@@ -550,11 +723,28 @@ def portfolio(request):
                 "current_price_stardust": _dust_str(current_price),
                 "current_value_stardust": _dust_str(current_value),
                 "pnl_stardust": _dust_str(pnl),
+                "shield_active": p.symbol in shield_symbols,
+                "multiply_active": p.symbol in multiply_symbols,
             }
         )
 
+    recon_intel = None
+    try:
+        snap = ReconSnapshot.objects.get(user=request.user)
+        recon_intel = {
+            "captured_at": snap.captured_at.isoformat(),
+            "players": snap.players,
+        }
+    except ReconSnapshot.DoesNotExist:
+        pass
+
     return JsonResponse(
-        {"positions": items, "portfolio_value_stardust": _dust_str(total_value)}
+        {
+            "positions": items,
+            "portfolio_value_stardust": _dust_str(total_value),
+            "recon_qty": _recon_qty_for_user(request.user),
+            "recon_intel": recon_intel,
+        }
     )
 
 

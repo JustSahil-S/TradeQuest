@@ -372,7 +372,8 @@
       .portfolio-item .top {
         display: flex;
         justify-content: space-between;
-        align-items: baseline;
+        align-items: flex-start;
+        gap: 8px;
       }
 
       .portfolio-item .symbol {
@@ -402,6 +403,111 @@
         margin-top: 4px;
         font-size: 12px;
         color: var(--muted);
+      }
+
+      .symbol-cell {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .powerup-badges {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .badge-pu {
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: 0.02em;
+        padding: 2px 6px;
+        border-radius: 6px;
+        line-height: 1.2;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .badge-shield {
+        color: #9de8ff;
+        background: rgba(80, 180, 255, 0.14);
+        border-color: rgba(120, 210, 255, 0.35);
+      }
+
+      .badge-multiply {
+        color: #ffd89a;
+        background: rgba(255, 180, 90, 0.14);
+        border-color: rgba(255, 200, 120, 0.35);
+      }
+
+      .recon-card {
+        margin-top: 14px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(181, 155, 255, 0.18);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .recon-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .recon-title {
+        font-weight: 800;
+        color: var(--purple-2);
+        font-size: 14px;
+      }
+
+      .recon-btn {
+        border: 1px solid rgba(181, 155, 255, 0.45);
+        background: rgba(138, 92, 255, 0.22);
+        color: #efe9ff;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .recon-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .recon-body {
+        font-size: 12px;
+        color: var(--text);
+        line-height: 1.45;
+      }
+
+      .recon-player {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .recon-player:first-of-type {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+      }
+
+      .recon-player-name {
+        font-weight: 750;
+        color: #e8deff;
+        margin-bottom: 4px;
+      }
+
+      .recon-holding {
+        color: var(--muted);
+        margin-left: 8px;
+        font-size: 11px;
       }
 
       .chart-canvas-wrap {
@@ -529,6 +635,76 @@
 
       .buy-meta.error {
         color: #ff8a9d;
+      }
+
+      .news-section {
+        margin-top: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(181, 155, 255, 0.18);
+        background: rgba(0, 0, 0, 0.2);
+        padding: 10px 12px 12px;
+      }
+
+      .news-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .news-title-label {
+        font-weight: 800;
+        color: var(--purple-2);
+        font-size: 14px;
+      }
+
+      .news-status {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .news-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 240px;
+        overflow: auto;
+      }
+
+      .news-item {
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid rgba(181, 155, 255, 0.12);
+        background: rgba(0, 0, 0, 0.22);
+      }
+
+      .news-item-title {
+        margin: 0 0 4px;
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.35;
+      }
+
+      .news-item-title a {
+        color: #e8deff;
+        text-decoration: none;
+      }
+
+      .news-item-title a:hover {
+        color: #c4b5ff;
+        text-decoration: underline;
+      }
+
+      .news-item-meta {
+        font-size: 11px;
+        color: var(--muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
       }
 
       .advisor-window {
@@ -844,6 +1020,15 @@
           <div class="chart-canvas-wrap">
             <canvas id="stockChart"></canvas>
           </div>
+
+          <div class="news-section" id="newsSection">
+            <div class="news-header">
+              <span class="news-title-label" id="newsTickerLabel">Headlines</span>
+              <span id="newsStatus" class="news-status"></span>
+            </div>
+            <ul class="news-list" id="newsList"></ul>
+          </div>
+
           <div class="buy-panel">
             <label for="buyQty">Buy shares</label>
             <input id="buyQty" class="qty-input" type="number" min="1" step="1" value="1" />
@@ -883,6 +1068,17 @@
           <p class="portfolio-total" id="portfolioTotal">Total value: 0 stardust</p>
           <div class="portfolio-list" id="portfolioList">
             <div class="buy-meta">No positions yet.</div>
+          </div>
+
+          <div class="recon-card" id="reconCard">
+            <div class="recon-header">
+              <span class="recon-title">Recon intel</span>
+              <button type="button" class="recon-btn" id="deployReconBtn">
+                Deploy recon
+              </button>
+            </div>
+            <div id="reconMeta" class="buy-meta"></div>
+            <div id="reconBody" class="recon-body"></div>
           </div>
 
           <div class="sector-card" id="sectorCard">
@@ -946,6 +1142,12 @@
         const isAdminTimelineEnabled = Boolean(timeTravelSliderEl);
         const sectorCanvasEl = document.getElementById("sectorDonut");
         const sectorMetaEl = document.getElementById("sectorMeta");
+        const newsListEl = document.getElementById("newsList");
+        const newsStatusEl = document.getElementById("newsStatus");
+        const newsTickerLabelEl = document.getElementById("newsTickerLabel");
+        const deployReconBtn = document.getElementById("deployReconBtn");
+        const reconMetaEl = document.getElementById("reconMeta");
+        const reconBodyEl = document.getElementById("reconBody");
         if (
           !statusEl ||
           !canvas ||
@@ -969,6 +1171,8 @@
         let currentTimeframe = "w";
         let currentPrice = null;
         let selectedAsOfDate = null;
+        let lastNewsSymbol = null;
+        let newsLoadSeq = 0;
 
         function toISODate(d) {
           return d.toISOString().slice(0, 10);
@@ -1087,10 +1291,72 @@
           buyMetaEl.classList.toggle("error", Boolean(asError));
         }
 
+        function renderReconIntel(payload) {
+          if (!reconMetaEl || !reconBodyEl || !deployReconBtn) return;
+          reconMetaEl.classList.remove("error");
+          const qty = Number(payload?.recon_qty ?? 0);
+          deployReconBtn.disabled = qty <= 0;
+          reconMetaEl.textContent =
+            "Recon in inventory: " + qty + (qty === 1 ? " charge" : " charges");
+          const intel = payload?.recon_intel;
+          if (!intel || !intel.players || !intel.players.length) {
+            reconBodyEl.innerHTML =
+              '<span class="buy-meta">Deploy recon to capture a snapshot of the top 3 players\' holdings.</span>';
+            return;
+          }
+          let cap = intel.captured_at || "";
+          try {
+            if (cap) {
+              const d = new Date(cap);
+              if (!Number.isNaN(d.getTime())) {
+                cap = d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+              }
+            }
+          } catch (_) {}
+          let html =
+            '<div class="buy-meta" style="margin-bottom:6px">Snapshot: ' +
+            (cap || "—") +
+            "</div>";
+          for (const pl of intel.players) {
+            const name = pl.username || "?";
+            const nw = pl.networth_stardust != null ? formatStardust2(pl.networth_stardust) : "—";
+            html +=
+              '<div class="recon-player">' +
+              '<div class="recon-player-name">#' +
+              (pl.rank ?? "") +
+              " " +
+              name +
+              " · Net worth " +
+              nw +
+              "</div>";
+            const holds = pl.holdings || [];
+            if (!holds.length) {
+              html += '<div class="recon-holding">No open positions.</div>';
+            } else {
+              for (const h of holds) {
+                html +=
+                  '<div class="recon-holding">' +
+                  (h.symbol || "") +
+                  " × " +
+                  (h.quantity ?? "") +
+                  " · Value " +
+                  formatStardust2(h.value_stardust) +
+                  " @ " +
+                  formatStardust2(h.current_price_stardust) +
+                  "</div>";
+              }
+            }
+            html += "</div>";
+          }
+          reconBodyEl.innerHTML = html;
+        }
+
         function renderPortfolio(payload) {
           const positions = payload?.positions || [];
           portfolioTotalEl.textContent =
             "Total value: " + formatStardust2(payload?.portfolio_value_stardust) + " stardust";
+
+          renderReconIntel(payload);
 
           if (!positions.length) {
             portfolioListEl.innerHTML = '<div class="buy-meta">No positions yet.</div>';
@@ -1107,11 +1373,28 @@
               pnlFinite > 0 ? "value pnl-pos" : pnlFinite < 0 ? "value pnl-neg" : "value pnl-zero";
             const pnlPrefix = pnlFinite > 0 ? "+" : "";
             const pnlText = pnlPrefix + formatStardust2(pnlFinite) + " net P/L";
+            const badges = [];
+            if (p.shield_active) {
+              badges.push(
+                '<span class="badge-pu badge-shield" title="Stardust Shield active">Shield</span>'
+              );
+            }
+            if (p.multiply_active) {
+              badges.push(
+                '<span class="badge-pu badge-multiply" title="2× profit on next sell of this stock">×2</span>'
+              );
+            }
+            const badgeHtml = badges.length
+              ? '<span class="powerup-badges">' + badges.join("") + "</span>"
+              : "";
             item.innerHTML =
               '<div class="portfolio-item-inner">' +
               '<div class="portfolio-face front">' +
               '<div class="top">' +
+              '<div class="symbol-cell">' +
               `<span class="symbol">${p.symbol}</span>` +
+              badgeHtml +
+              "</div>" +
               `<span class="${pnlClass}">${pnlText}</span>` +
               "</div>" +
               '<div class="meta">' +
@@ -1227,6 +1510,47 @@
           } catch (e) {
             portfolioListEl.innerHTML = '<div class="buy-meta">Could not load portfolio.</div>';
           }
+        }
+
+        if (deployReconBtn) {
+          deployReconBtn.addEventListener("click", async function () {
+            if (deployReconBtn.disabled) return;
+            deployReconBtn.disabled = true;
+            if (reconMetaEl) reconMetaEl.classList.remove("error");
+            try {
+              const res = await fetch("{% url 'use_recon' %}", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-CSRFToken": getCookie("csrftoken"),
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({ as_of: selectedAsOfDate || null }),
+              });
+              const payload = await res.json();
+              if (!res.ok) throw new Error(payload?.error || "Recon failed");
+              if (deployReconBtn) {
+                deployReconBtn.disabled = Number(payload?.remaining_recon ?? 0) <= 0;
+              }
+              await loadPortfolio();
+            } catch (e) {
+              if (reconMetaEl) {
+                reconMetaEl.textContent = e?.message || "Recon failed.";
+                reconMetaEl.classList.add("error");
+              }
+              try {
+                const r = await fetch("{% url 'portfolio' %}?_t=1" + getAsOfParam(), {
+                  headers: { Accept: "application/json" },
+                });
+                const p = await r.json();
+                if (r.ok && deployReconBtn) {
+                  deployReconBtn.disabled = Number(p?.recon_qty ?? 0) <= 0;
+                }
+              } catch (_) {
+                if (deployReconBtn) deployReconBtn.disabled = false;
+              }
+            }
+          });
         }
 
         async function loadSectorBreakdown() {
@@ -1401,6 +1725,70 @@
           loadChart(currentSymbol, currentTimeframe, Number(slider.value));
         });
 
+        async function loadNews(symbol) {
+          if (!newsListEl || !newsStatusEl) return;
+          const seq = ++newsLoadSeq;
+          newsStatusEl.textContent = "Loading…";
+          if (newsTickerLabelEl) {
+            newsTickerLabelEl.textContent = "Headlines · " + (symbol || "SPY");
+          }
+          try {
+            const url =
+              "{% url 'stock_news' %}?symbol=" +
+              encodeURIComponent(symbol || "SPY") +
+              "&limit=8";
+            const res = await fetch(url, { headers: { Accept: "application/json" } });
+            const payload = await res.json();
+            if (seq !== newsLoadSeq) return;
+            if (!res.ok) throw new Error(payload?.error || "News unavailable");
+            const articles = payload.articles || [];
+            newsListEl.innerHTML = "";
+            if (articles.length === 0) {
+              newsStatusEl.textContent = "No headlines returned.";
+              return;
+            }
+            newsStatusEl.textContent = "";
+            articles.forEach(function (a) {
+              const li = document.createElement("li");
+              li.className = "news-item";
+              const titleP = document.createElement("p");
+              titleP.className = "news-item-title";
+              if (a.link) {
+                const link = document.createElement("a");
+                link.href = a.link;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.textContent = a.title || "";
+                titleP.appendChild(link);
+              } else {
+                titleP.textContent = a.title || "";
+              }
+              li.appendChild(titleP);
+              const meta = document.createElement("div");
+              meta.className = "news-item-meta";
+              const bits = [];
+              if (a.publisher) bits.push(a.publisher);
+              if (a.published_at) {
+                try {
+                  const d = new Date(a.published_at);
+                  if (!Number.isNaN(d.getTime())) {
+                    bits.push(
+                      d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+                    );
+                  }
+                } catch (_) {}
+              }
+              meta.textContent = bits.join(" · ");
+              li.appendChild(meta);
+              newsListEl.appendChild(li);
+            });
+          } catch (e) {
+            if (seq !== newsLoadSeq) return;
+            newsStatusEl.textContent = e?.message || "Could not load news.";
+            newsListEl.innerHTML = "";
+          }
+        }
+
         async function loadChart(symbol, timeframe, points) {
           statusEl.textContent = "";
           try {
@@ -1427,6 +1815,11 @@
               }
             }
             currentSymbol = payload?.symbol || currentSymbol;
+            const resolvedSymbol = payload?.symbol || symbol || currentSymbol;
+            if (resolvedSymbol !== lastNewsSymbol) {
+              lastNewsSymbol = resolvedSymbol;
+              loadNews(resolvedSymbol);
+            }
             currentPrice = Number((payload?.closes || []).slice(-1)[0] || 0);
             if (currentPrice > 0) {
               setBuyMeta(
@@ -1523,6 +1916,9 @@
             }
           } catch (e) {
             console.error(e);
+            lastNewsSymbol = null;
+            if (newsListEl) newsListEl.innerHTML = "";
+            if (newsStatusEl) newsStatusEl.textContent = "";
             statusEl.textContent = "Could not load chart: " + (e?.message || "Unknown error");
           }
         }

@@ -1,9 +1,64 @@
 import yfinance as yf
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 
 _SECTOR_CACHE: dict[str, tuple[float, str]] = {}
 _SECTOR_TTL_SECONDS = 24 * 60 * 60
+
+_NEWS_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_NEWS_TTL_SECONDS = 120
+
+
+def _normalize_yahoo_news_item(item: object) -> dict | None:
+    """
+    yfinance may return flat dicts or nested {'content': {...}} story objects.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    title = ""
+    link: str | None = None
+    publisher = ""
+    published_at: str | None = None
+
+    inner = item.get("content")
+    if isinstance(inner, dict):
+        title = (inner.get("title") or "").strip()
+        cu = inner.get("canonicalUrl")
+        if isinstance(cu, dict):
+            link = (cu.get("url") or "").strip() or None
+        if not link:
+            preview = inner.get("previewUrl")
+            if isinstance(preview, str) and preview.strip():
+                link = preview.strip()
+        pub_raw = inner.get("pubDate") or inner.get("displayTime")
+        if isinstance(pub_raw, str) and pub_raw.strip():
+            published_at = pub_raw.strip()
+        prov = inner.get("provider")
+        if isinstance(prov, dict):
+            publisher = (prov.get("displayName") or "").strip()
+    else:
+        title = (item.get("title") or "").strip()
+        link_raw = (item.get("link") or "").strip()
+        link = link_raw or None
+        publisher = (item.get("publisher") or item.get("source") or "").strip()
+        ts_ms = item.get("providerPublishTime")
+        if ts_ms is not None:
+            try:
+                dt = datetime.fromtimestamp(float(ts_ms) / 1000.0, tz=timezone.utc)
+                published_at = dt.isoformat()
+            except (TypeError, ValueError, OSError):
+                published_at = None
+
+    if not title:
+        return None
+
+    return {
+        "title": title,
+        "link": link,
+        "publisher": publisher or None,
+        "published_at": published_at,
+    }
 
 
 def fetch_sector(symbol: str) -> str:
@@ -29,6 +84,40 @@ def fetch_sector(symbol: str) -> str:
 
     _SECTOR_CACHE[sym] = (now, sector)
     return sector
+
+
+def fetch_news(symbol: str, limit: int = 8) -> list[dict]:
+    """
+    Headlines for a ticker via yfinance (Yahoo Finance news feed).
+    Cached briefly per symbol to limit upstream calls.
+    """
+    sym = (symbol or "").upper().strip() or "SPY"
+    safe_limit = max(1, min(int(limit), 20))
+
+    now = time.time()
+    cached = _NEWS_CACHE.get(sym)
+    if cached:
+        ts, articles = cached
+        if now - ts < _NEWS_TTL_SECONDS:
+            return articles[:safe_limit]
+
+    articles: list[dict] = []
+    try:
+        ticker = yf.Ticker(sym)
+        raw = getattr(ticker, "news", None) or []
+    except Exception:
+        raw = []
+
+    for item in raw:
+        norm = _normalize_yahoo_news_item(item)
+        if not norm:
+            continue
+        articles.append(norm)
+        if len(articles) >= 20:
+            break
+
+    _NEWS_CACHE[sym] = (now, articles)
+    return articles[:safe_limit]
 
 
 def fetch_candles(

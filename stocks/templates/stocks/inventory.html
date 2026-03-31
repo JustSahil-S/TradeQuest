@@ -279,6 +279,56 @@
       </div>
 
       <div class="panel">
+        <h2>Recon</h2>
+        <button
+          id="reconPowerUpBtn"
+          class="shield-item-btn"
+          type="button"
+          {% if recon_qty|default:0 <= 0 %}disabled{% endif %}
+        >
+          <div class="shield-left">
+            <div class="shield-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
+            </div>
+            <div>
+              Recon
+              <div class="shield-sub">Top 3 players' holdings snapshot</div>
+            </div>
+          </div>
+          <div>Qty: {{ recon_qty|default:0 }}</div>
+        </button>
+        <p class="muted" style="margin-top: 10px">
+          Each use captures the current top 3 players by net worth and their open positions. Your last snapshot stays
+          until you deploy another Recon.
+        </p>
+        <div id="reconInvMsg" class="msg"></div>
+      </div>
+
+      {% if recon_snapshot %}
+      <div class="panel">
+        <h2>Latest recon snapshot</h2>
+        <p class="muted">Captured: {{ recon_snapshot.captured_at }}</p>
+        {% for pl in recon_snapshot.players %}
+        <div class="card" style="margin-top: 10px">
+          <div class="name">#{{ pl.rank }} {{ pl.username }} · Net worth {{ pl.networth_stardust }}</div>
+          <div class="desc">
+            {% if pl.holdings %}
+            {% for h in pl.holdings %}
+            <div>{{ h.symbol }} × {{ h.quantity }} · Value {{ h.value_stardust }} @ {{ h.current_price_stardust }}</div>
+            {% endfor %}
+            {% else %}
+            No open positions.
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="panel">
         <h2>Active Shields</h2>
         {% if active_shields %}
         <div class="cards">
@@ -333,6 +383,8 @@
         const multiplySymbolEl = document.getElementById("multiplySymbol");
         const applyMultiplyBtn = document.getElementById("applyMultiplyBtn");
         const multiplyMsgEl = document.getElementById("multiplyMsg");
+        const reconPowerBtn = document.getElementById("reconPowerUpBtn");
+        const reconInvMsgEl = document.getElementById("reconInvMsg");
 
         if (
           !shieldPowerBtn ||
@@ -345,12 +397,15 @@
           !multiplyConfigPanel ||
           !multiplySymbolEl ||
           !applyMultiplyBtn ||
-          !multiplyMsgEl
+          !multiplyMsgEl ||
+          !reconPowerBtn ||
+          !reconInvMsgEl
         )
           return;
 
         const initialShieldQty = {{ shield_qty|default:0 }};
         const initialMultiplyQty = {{ multiply_qty|default:0 }};
+        const initialReconQty = {{ recon_qty|default:0 }};
 
         function getCookie(name) {
           const v = `; ${document.cookie}`;
@@ -373,6 +428,11 @@
         function setMultiplyMsg(text, isError) {
           multiplyMsgEl.textContent = text || "";
           multiplyMsgEl.classList.toggle("error", Boolean(isError));
+        }
+
+        function setReconInvMsg(text, isError) {
+          reconInvMsgEl.textContent = text || "";
+          reconInvMsgEl.classList.toggle("error", Boolean(isError));
         }
 
         let lastSuggestedTrigger = "";
@@ -485,6 +545,33 @@
             setMultiplyMsg(e?.message || "Failed to apply multiplier", true);
           } finally {
             applyMultiplyBtn.disabled = false;
+          }
+        });
+
+        reconPowerBtn.addEventListener("click", async function () {
+          if (initialReconQty <= 0) {
+            setReconInvMsg("You don't have any Recon charges.", true);
+            return;
+          }
+          reconPowerBtn.disabled = true;
+          setReconInvMsg("", false);
+          try {
+            const res = await fetch("{% url 'use_recon' %}", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+                Accept: "application/json",
+              },
+              body: JSON.stringify({}),
+            });
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.error || "Recon failed");
+            setReconInvMsg("Intel updated.", false);
+            window.setTimeout(() => window.location.reload(), 500);
+          } catch (e) {
+            setReconInvMsg(e?.message || "Recon failed", true);
+            reconPowerBtn.disabled = false;
           }
         });
       })();

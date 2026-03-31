@@ -35,3 +35,14 @@ def ensure_profile_exists(sender, instance, created, **kwargs):
             user=instance, powerup=multiply_powerup, defaults={"quantity": 1}
         )
 
+        recon_powerup, _ = PowerUp.objects.get_or_create(
+            code="RECON",
+            defaults={
+                "name": "Recon",
+                "description": "Reveal the top 3 players' current holdings; snapshot refreshes when you deploy again.",
+            },
+        )
+        UserPowerUp.objects.get_or_create(
+            user=instance, powerup=recon_powerup, defaults={"quantity": 1}
+        )
+
